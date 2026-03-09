@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
 _DEFAULT_LOCAL_ROLE_ARN = "arn:aws:iam::123456789012:role/pytest-stepfunctions-local"
 _TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
+_RETRYABLE_STATE_MACHINE_ERROR_CODES = {"StateMachineAlreadyExists", "StateMachineDeleting"}
+_STATE_MACHINE_RETRY_DELAY_SECONDS = 0.1
+_STATE_MACHINE_RETRY_ATTEMPTS = 5
 
 
 class LocalBackend(Backend):
@@ -43,50 +46,71 @@ class LocalBackend(Backend):
         state_machine_arn: str | None = None
 
         try:
-            create_response = client.create_state_machine(
-                name=spec.state_machine_name,
-                definition=self._json_dump(spec.definition),
-                roleArn=spec.config.role_arn or _DEFAULT_LOCAL_ROLE_ARN,
-                type="STANDARD",
-            )
-            state_machine_arn = str(create_response["stateMachineArn"])
+            for attempt in range(_STATE_MACHINE_RETRY_ATTEMPTS):
+                try:
+                    create_response = client.create_state_machine(
+                        name=spec.state_machine_name,
+                        definition=self._json_dump(spec.definition),
+                        roleArn=spec.config.role_arn or _DEFAULT_LOCAL_ROLE_ARN,
+                        type="STANDARD",
+                    )
+                    state_machine_arn = str(create_response["stateMachineArn"])
 
-            start_response = client.start_execution(
-                stateMachineArn=_execution_target_arn(
-                    state_machine_arn=state_machine_arn,
-                    case_name=spec.scenario.case,
-                ),
-                name=spec.execution_name,
-                input=self._json_dump(spec.scenario.input),
-            )
-            execution_arn = str(start_response["executionArn"])
-            final_response = self._wait_for_execution(
-                client=client,
-                execution_arn=execution_arn,
-                timeout_seconds=spec.timeout_seconds,
-            )
-        except (BotoCoreError, ClientError) as exc:
-            action = "run a local execution"
-            raise self._backend_error(action, exc) from exc
+                    start_response = client.start_execution(
+                        stateMachineArn=_execution_target_arn(
+                            state_machine_arn=state_machine_arn,
+                            case_name=spec.scenario.case,
+                        ),
+                        name=spec.execution_name,
+                        input=self._json_dump(spec.scenario.input),
+                    )
+                    execution_arn = str(start_response["executionArn"])
+                    final_response = self._wait_for_execution(
+                        client=client,
+                        execution_arn=execution_arn,
+                        timeout_seconds=spec.timeout_seconds,
+                    )
+                    if str(final_response.get("status")) == "FAILED":
+                        final_response.update(
+                            _failure_details_from_history(
+                                client=client,
+                                execution_arn=execution_arn,
+                            )
+                        )
+                    return ExecutionResult(
+                        status=str(final_response["status"]),
+                        backend=self.name,
+                        execution_arn=execution_arn,
+                        output_json=self._parse_json_output(final_response.get("output")),
+                        error=_optional_str(final_response.get("error")),
+                        cause=_optional_str(final_response.get("cause")),
+                        next_state=None,
+                        raw={
+                            "create_state_machine": create_response,
+                            "start_execution": start_response,
+                            "describe_execution": final_response,
+                        },
+                    )
+                except ClientError as exc:
+                    if _is_retryable_state_machine_error(exc) and attempt < (
+                        _STATE_MACHINE_RETRY_ATTEMPTS - 1
+                    ):
+                        if state_machine_arn is not None:
+                            with suppress(BotoCoreError, ClientError):
+                                client.delete_state_machine(stateMachineArn=state_machine_arn)
+                            state_machine_arn = None
+                        time.sleep(_STATE_MACHINE_RETRY_DELAY_SECONDS)
+                        continue
+                    action = "run a local execution"
+                    raise self._backend_error(action, exc) from exc
+                except BotoCoreError as exc:
+                    action = "run a local execution"
+                    raise self._backend_error(action, exc) from exc
         finally:
             if state_machine_arn is not None:
                 with suppress(BotoCoreError, ClientError):
                     client.delete_state_machine(stateMachineArn=state_machine_arn)
-
-        return ExecutionResult(
-            status=str(final_response["status"]),
-            backend=self.name,
-            execution_arn=execution_arn,
-            output_json=self._parse_json_output(final_response.get("output")),
-            error=_optional_str(final_response.get("error")),
-            cause=_optional_str(final_response.get("cause")),
-            next_state=None,
-            raw={
-                "create_state_machine": create_response,
-                "start_execution": start_response,
-                "describe_execution": final_response,
-            },
-        )
+        raise AssertionError
 
     def test_state(self, spec: StateTestSpec) -> ExecutionResult:
         del spec
@@ -118,6 +142,42 @@ def _execution_target_arn(*, state_machine_arn: str, case_name: str | None) -> s
     if case_name is None:
         return state_machine_arn
     return f"{state_machine_arn}#{case_name}"
+
+
+def _failure_details_from_history(
+    *,
+    client: StepFunctionsClientProtocol,
+    execution_arn: str,
+) -> dict[str, str]:
+    response = client.get_execution_history(executionArn=execution_arn)
+    events = response.get("events")
+    if not isinstance(events, list):
+        return {}
+
+    for event in reversed(events):
+        if not isinstance(event, Mapping):
+            continue
+        details = event.get("executionFailedEventDetails")
+        if not isinstance(details, Mapping):
+            continue
+
+        failure_details = {
+            key: value
+            for key, value in (
+                ("error", _optional_str(details.get("error"))),
+                ("cause", _optional_str(details.get("cause"))),
+            )
+            if value is not None
+        }
+        if failure_details:
+            return failure_details
+    return {}
+
+
+def _is_retryable_state_machine_error(exc: ClientError) -> bool:
+    error = exc.response.get("Error", {})
+    code = error.get("Code")
+    return isinstance(code, str) and code in _RETRYABLE_STATE_MACHINE_ERROR_CODES
 
 
 def _assert_mock_case_exists(

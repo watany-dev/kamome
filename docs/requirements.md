@@ -27,12 +27,13 @@
 - optional validation
 - `aws` backend stub
 - `tutorials/order_status/` の手動チュートリアル
+- Step Functions Local integration test
+- GitHub Actions の dedicated Local integration job
 - `uv run ci` を正本とする品質ゲート
 
 ## 非スコープ
 
 - `aws` backend の本実装
-- Step Functions Local integration test の常設 CI
 - AWS `TestState` integration test の常設 CI
 - YAML definition 対応
 - `TestState` のレート制御

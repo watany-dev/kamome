@@ -51,7 +51,7 @@
 - [x] `ExecutionResult` への変換を実装する
 - [x] `sfn_mock_config` を読んで test case 存在確認を入れる
 - [ ] mock config の深い構造検証を入れる
-- [ ] Local integration test を追加する
+- [x] Local integration test を追加する
 
 ### 3.2 `teststate`
 
@@ -87,7 +87,7 @@
 - [x] backend error / validation / timeout の unit test
 - [x] `pytester` を使う plugin test
 - [x] 95% 以上の branch coverage を維持する
-- [ ] Step Functions Local integration test
+- [x] Step Functions Local integration test
 - [ ] AWS `TestState` の opt-in integration test
 
 ## 6. ドキュメント
@@ -98,7 +98,7 @@
 - [x] `tutorials/order_status/` に手動チュートリアルを追加する
 - [ ] backend ごとの troubleshooting を追加する
 - [x] examples を追加する
-- [ ] GitHub Actions で Local integration job を追加する
+- [x] GitHub Actions で Local integration job を追加する
 
 ## 7. 後続候補
 

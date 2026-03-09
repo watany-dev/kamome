@@ -42,12 +42,14 @@
 - `tutorials/order_status/` の手動チュートリアル
   - Step Functions Local を使う `sfn_run` サンプル
   - AWS `TestState` を使う `sfn_test_state` サンプル
+- Step Functions Local を使う integration test
+  - `tests/integration/test_local_backend.py`
+  - GitHub Actions の `local-integration` job
 - `uv run ci` を正本とする品質ゲート
 
 まだ未実装のもの:
 
 - `aws` backend の本実装
-- Step Functions Local を使う integration test / CI job
 - AWS `TestState` の常設 CI job
 - YAML definition 対応
 - `TestState` のスロットリングや xdist 連携
@@ -146,6 +148,12 @@ uv run pytest tutorials/order_status/tests/test_teststate_order_status.py -q --s
 ```
 
 このチュートリアルは学習用資材です。通常の `uv run ci` には含めません。
+
+実 backend を使う自動統合確認は `tests/integration/test_local_backend.py` にあります。ローカルで回す場合は Step Functions Local を起動したうえで次を実行します。
+
+```bash
+PYTEST_STEPFUNCTIONS_RUN_LOCAL_INTEGRATION=1 uv run pytest tests/integration/test_local_backend.py -q
+```
 
 ## 現在の公開 API
 

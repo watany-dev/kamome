@@ -8,7 +8,12 @@ from botocore.exceptions import ClientError
 from pytest_stepfunctions.backends import create_backend, resolve_backend_name
 from pytest_stepfunctions.backends.aws import AwsBackend
 from pytest_stepfunctions.backends.base import Backend
-from pytest_stepfunctions.backends.local import LocalBackend, _assert_mock_case_exists
+from pytest_stepfunctions.backends.local import (
+    LocalBackend,
+    _assert_mock_case_exists,
+    _failure_details_from_history,
+    _is_retryable_state_machine_error,
+)
 from pytest_stepfunctions.backends.teststate import TestStateBackend as _TestStateBackend
 from pytest_stepfunctions.config import ResolvedConfig
 from pytest_stepfunctions.exceptions import (
@@ -30,12 +35,16 @@ class _FakeLocalClient:
     def __init__(self) -> None:
         self.deleted: list[str] = []
         self.describe_calls = 0
+        self.create_calls = 0
+        self.start_calls = 0
 
     def create_state_machine(self, **kwargs: object) -> dict[str, object]:
+        self.create_calls += 1
         self.created = kwargs
         return {"stateMachineArn": "arn:aws:states:local:stateMachine:OrderFlow"}
 
     def start_execution(self, **kwargs: object) -> dict[str, object]:
+        self.start_calls += 1
         self.started = kwargs
         return {"executionArn": "arn:aws:states:local:execution:OrderFlow:exec-1"}
 
@@ -49,6 +58,22 @@ class _FakeLocalClient:
 
     def delete_state_machine(self, **kwargs: object) -> None:
         self.deleted.append(str(kwargs["stateMachineArn"]))
+
+    def get_execution_history(self, **kwargs: object) -> dict[str, object]:
+        self.history_kwargs = kwargs
+        return {"events": []}
+
+
+class _RetryingLocalClient(_FakeLocalClient):
+    def start_execution(self, **kwargs: object) -> dict[str, object]:
+        self.start_calls += 1
+        self.started = kwargs
+        if self.start_calls == 1:
+            raise ClientError(
+                {"Error": {"Code": "StateMachineDeleting", "Message": "state machine is deleting"}},
+                "StartExecution",
+            )
+        return {"executionArn": "arn:aws:states:local:execution:OrderFlow:exec-1"}
 
 
 class _FakeTestStateClient:
@@ -222,6 +247,158 @@ def test_local_backend_run_translates_execution(monkeypatch: pytest.MonkeyPatch)
     assert client.deleted == ["arn:aws:states:local:stateMachine:OrderFlow"]
 
 
+def test_local_backend_reads_failure_details_from_execution_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FailedLocalClient(_FakeLocalClient):
+        def describe_execution(self, **kwargs: object) -> dict[str, object]:
+            self.describe_calls += 1
+            self.described = kwargs
+            return {"status": "FAILED"}
+
+        def get_execution_history(self, **kwargs: object) -> dict[str, object]:
+            self.history_kwargs = kwargs
+            return {
+                "events": [
+                    {
+                        "executionFailedEventDetails": {
+                            "error": "Order.NotPaid",
+                            "cause": "Order status was not PAID.",
+                        }
+                    }
+                ]
+            }
+
+    client = _FailedLocalClient()
+    backend = LocalBackend(_config(local_endpoint="http://local"))
+
+    def fake_service_client(**_kwargs: object) -> _FailedLocalClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+
+    result = backend.run(
+        ExecutionSpec(
+            definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+            definition_source="<inline>",
+            state_machine_name="OrderFlow",
+            execution_name="exec-1",
+            scenario=Scenario(id="pending", input={"orderId": "o-1"}),
+            timeout_seconds=5,
+            config=_config(local_endpoint="http://local"),
+        )
+    )
+
+    assert result.status == "FAILED"
+    assert result.error == "Order.NotPaid"
+    assert result.cause == "Order status was not PAID."
+    assert client.history_kwargs == {
+        "executionArn": "arn:aws:states:local:execution:OrderFlow:exec-1"
+    }
+
+
+def test_local_backend_retries_state_machine_deleting_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _RetryingLocalClient()
+    backend = LocalBackend(_config(local_endpoint="http://local"))
+
+    def fake_service_client(**_kwargs: object) -> _FakeLocalClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+    monkeypatch.setattr("pytest_stepfunctions.backends.local.time.sleep", lambda _seconds: None)
+
+    result = backend.run(
+        ExecutionSpec(
+            definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+            definition_source="<inline>",
+            state_machine_name="OrderFlow",
+            execution_name="exec-1",
+            scenario=Scenario(id="happy", input={"orderId": "o-1"}),
+            timeout_seconds=5,
+            config=_config(local_endpoint="http://local"),
+        )
+    )
+
+    assert result.status == "SUCCEEDED"
+    assert client.create_calls == 2
+    assert client.start_calls == 2
+    assert client.deleted == [
+        "arn:aws:states:local:stateMachine:OrderFlow",
+        "arn:aws:states:local:stateMachine:OrderFlow",
+    ]
+
+
+def test_local_backend_retries_state_machine_already_exists_on_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _CreateRetryClient(_FakeLocalClient):
+        def create_state_machine(self, **kwargs: object) -> dict[str, object]:
+            self.create_calls += 1
+            self.created = kwargs
+            if self.create_calls == 1:
+                raise ClientError(
+                    {"Error": {"Code": "StateMachineAlreadyExists", "Message": "already exists"}},
+                    "CreateStateMachine",
+                )
+            return {"stateMachineArn": "arn:aws:states:local:stateMachine:OrderFlow"}
+
+    client = _CreateRetryClient()
+    backend = LocalBackend(_config(local_endpoint="http://local"))
+
+    def fake_service_client(**_kwargs: object) -> _CreateRetryClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+    monkeypatch.setattr("pytest_stepfunctions.backends.local.time.sleep", lambda _seconds: None)
+
+    result = backend.run(
+        ExecutionSpec(
+            definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+            definition_source="<inline>",
+            state_machine_name="OrderFlow",
+            execution_name="exec-1",
+            scenario=Scenario(id="happy", input={"orderId": "o-1"}),
+            timeout_seconds=5,
+            config=_config(local_endpoint="http://local"),
+        )
+    )
+
+    assert result.status == "SUCCEEDED"
+    assert client.create_calls == 2
+    assert client.deleted == ["arn:aws:states:local:stateMachine:OrderFlow"]
+
+
+def test_local_backend_wraps_non_retryable_client_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FailingClient(_FakeLocalClient):
+        def create_state_machine(self, **kwargs: object) -> dict[str, object]:
+            del kwargs
+            raise ClientError({"Error": {"Code": "Boom", "Message": "bad"}}, "CreateStateMachine")
+
+    backend = LocalBackend(_config(local_endpoint="http://local"))
+
+    def fake_service_client(**_kwargs: object) -> _FailingClient:
+        return _FailingClient()
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+
+    with pytest.raises(BackendError, match="run a local execution"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={"orderId": "o-1"}),
+                timeout_seconds=5,
+                config=_config(local_endpoint="http://local"),
+            )
+        )
+
+
 def test_local_backend_wait_for_execution_times_out() -> None:
     backend = LocalBackend(_config())
 
@@ -235,6 +412,81 @@ def test_local_backend_wait_for_execution_times_out() -> None:
             execution_arn="arn",
             timeout_seconds=0,
         )
+
+
+def test_local_backend_wait_for_execution_polls_until_terminal_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = LocalBackend(_config())
+
+    class _PollingClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def describe_execution(self, **_kwargs: object) -> dict[str, object]:
+            self.calls += 1
+            if self.calls == 1:
+                return {"status": "RUNNING"}
+            return {"status": "SUCCEEDED", "output": '{"status": "paid"}'}
+
+    client = _PollingClient()
+    monkeypatch.setattr("pytest_stepfunctions.backends.local.time.sleep", lambda _seconds: None)
+
+    result = backend._wait_for_execution(
+        client=cast("StepFunctionsClientProtocol", client),
+        execution_arn="arn",
+        timeout_seconds=1,
+    )
+
+    assert result["status"] == "SUCCEEDED"
+    assert client.calls == 2
+
+
+def test_failure_details_from_history_handles_missing_or_malformed_events() -> None:
+    class _HistoryClient:
+        def __init__(self, response: dict[str, object]) -> None:
+            self.response = response
+
+        def get_execution_history(self, **_kwargs: object) -> dict[str, object]:
+            return self.response
+
+    assert (
+        _failure_details_from_history(
+            client=cast("StepFunctionsClientProtocol", _HistoryClient({"events": "bad"})),
+            execution_arn="arn",
+        )
+        == {}
+    )
+    assert (
+        _failure_details_from_history(
+            client=cast(
+                "StepFunctionsClientProtocol",
+                _HistoryClient(
+                    {
+                        "events": [
+                            "bad",
+                            {"type": "ExecutionStarted"},
+                            {"executionFailedEventDetails": {"error": 1, "cause": None}},
+                        ]
+                    }
+                ),
+            ),
+            execution_arn="arn",
+        )
+        == {}
+    )
+
+
+def test_is_retryable_state_machine_error_recognizes_supported_codes() -> None:
+    assert _is_retryable_state_machine_error(
+        ClientError(
+            {"Error": {"Code": "StateMachineDeleting", "Message": "deleting"}},
+            "StartExecution",
+        )
+    )
+    assert not _is_retryable_state_machine_error(
+        ClientError({"Error": {"Code": "Boom", "Message": "bad"}}, "StartExecution")
+    )
 
 
 def test_assert_mock_case_exists_validates_structure(tmp_path: Path) -> None:
