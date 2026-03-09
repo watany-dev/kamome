@@ -26,6 +26,7 @@
 - `teststate` backend の最小実装
 - optional validation
 - `aws` backend stub
+- `tutorials/order_status/` の手動チュートリアル
 - `uv run ci` を正本とする品質ゲート
 
 ## 非スコープ
@@ -57,6 +58,7 @@
 - `teststate` backend は `role_arn` を必須とする
 - validation は AWS `ValidateStateMachineDefinition` へ到達できる認証情報が必要
 - `Scenario.case` の事前検証は `sfn_mock_config` が設定されている場合のみ行う
+- tutorial は学習用の手動実行資材であり、通常の CI 対象ではない
 
 ## 品質ルール
 

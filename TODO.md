@@ -95,8 +95,9 @@
 - [x] README を runtime 実装後の内容へ更新する
 - [x] `docs/requirements.md` を runtime 実装後のスコープへ更新する
 - [x] runtime backend 設計書を追加する
+- [x] `tutorials/order_status/` に手動チュートリアルを追加する
 - [ ] backend ごとの troubleshooting を追加する
-- [ ] examples を追加する
+- [x] examples を追加する
 - [ ] GitHub Actions で Local integration job を追加する
 
 ## 7. 後続候補

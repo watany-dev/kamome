@@ -39,6 +39,9 @@
   - `ExecutionResult` への正規化
 - `ValidateStateMachineDefinition` を使う optional validation
 - `aws` backend の stub
+- `tutorials/order_status/` の手動チュートリアル
+  - Step Functions Local を使う `sfn_run` サンプル
+  - AWS `TestState` を使う `sfn_test_state` サンプル
 - `uv run ci` を正本とする品質ゲート
 
 まだ未実装のもの:
@@ -125,6 +128,24 @@ def test_check_status_paid(sfn_test_state):
     result.assert_succeeded()
     assert result.next_state == "Complete"
 ```
+
+## チュートリアル
+
+実データと実ファイルで plugin の使い方を試したい場合は [`tutorials/order_status/`](tutorials/order_status/README.md) を使ってください。
+
+- `tutorials/order_status/tests/test_local_order_flow.py`
+  - Step Functions Local に同梱 workflow を流し、成功系と失敗系を確認します
+- `tutorials/order_status/tests/test_teststate_order_status.py`
+  - 同じ workflow の `CheckStatus` state を AWS `TestState` で直接検証します
+
+手動実行コマンド:
+
+```bash
+uv run pytest tutorials/order_status/tests/test_local_order_flow.py -q
+uv run pytest tutorials/order_status/tests/test_teststate_order_status.py -q --sfn-role-arn arn:aws:iam::123456789012:role/StepFunctionsTestRole
+```
+
+このチュートリアルは学習用資材です。通常の `uv run ci` には含めません。
 
 ## 現在の公開 API
 
@@ -232,6 +253,7 @@ AWS `TestState` API を使って state 単体テストを実行します。
 - `Scenario.case` の事前確認は `sfn_mock_config` が設定されている場合に限って行います。
 - `definition` の YAML は未対応です。
 - `aws` backend は非目標ではなく将来候補ですが、現時点では未実装です。
+- `tutorials/order_status/` は手動チュートリアルであり、integration test の代替ではありません。
 
 ## 開発コマンド
 

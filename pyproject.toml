@@ -94,6 +94,7 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "src/pytest_stepfunctions/_dev.py" = ["S404", "S603"]
 "tests/**/*.py" = ["S101"]
+"tutorials/**/*.py" = ["S101"]
 
 [tool.mypy]
 python_version = "3.10"
