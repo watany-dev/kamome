@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from importlib.metadata import entry_points
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
 
 import pytest
 
 
 def test_pytest11_entrypoint_is_declared() -> None:
-    pytest11 = entry_points(group="pytest11")
-    matches = [
-        entry_point
-        for entry_point in pytest11
-        if entry_point.name == "pytest_stepfunctions"
-        and entry_point.value == "pytest_stepfunctions.plugin"
-    ]
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    pytest11 = pyproject["project"]["entry-points"]["pytest11"]
 
-    assert matches
+    assert pytest11["pytest_stepfunctions"] == "pytest_stepfunctions.plugin"
 
 
 def test_marker_registration_is_visible(pytester: pytest.Pytester) -> None:
@@ -25,7 +25,7 @@ def test_marker_registration_is_visible(pytester: pytest.Pytester) -> None:
         """
     )
 
-    result = pytester.runpytest_subprocess("-p", "pytest_stepfunctions.plugin", "--markers")
+    result = pytester.runpytest("-p", "pytest_stepfunctions.plugin", "--markers")
 
     result.stdout.fnmatch_lines(
         [
@@ -46,7 +46,7 @@ def test_stub_fixtures_fail_with_actionable_message(pytester: pytest.Pytester) -
         """
     )
 
-    result = pytester.runpytest_subprocess("-p", "pytest_stepfunctions.plugin", "-q")
+    result = pytester.runpytest("-p", "pytest_stepfunctions.plugin", "-q")
 
     result.stdout.fnmatch_lines(
         [
@@ -58,7 +58,7 @@ def test_stub_fixtures_fail_with_actionable_message(pytester: pytest.Pytester) -
 
 
 def test_cli_options_are_exposed_in_help(pytester: pytest.Pytester) -> None:
-    result = pytester.runpytest_subprocess("-p", "pytest_stepfunctions.plugin", "--help")
+    result = pytester.runpytest("-p", "pytest_stepfunctions.plugin", "--help")
 
     result.stdout.fnmatch_lines(
         [
