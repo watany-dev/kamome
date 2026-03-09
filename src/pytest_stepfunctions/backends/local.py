@@ -33,12 +33,15 @@ class LocalBackend(Backend):
     name = "local"
 
     def run(self, spec: ExecutionSpec) -> ExecutionResult:
-        if spec.scenario.case is not None and spec.config.mock_config is not None:
-            _assert_mock_case_exists(
-                mock_config_path=spec.config.mock_config,
-                state_machine_name=spec.state_machine_name,
-                case_name=spec.scenario.case,
-            )
+        if spec.config.mock_config is not None:
+            mock_document = _load_mock_config_document(spec.config.mock_config)
+            if spec.scenario.case is not None:
+                _assert_mock_case_exists(
+                    mock_document=mock_document,
+                    mock_config_path=spec.config.mock_config,
+                    state_machine_name=spec.state_machine_name,
+                    case_name=spec.scenario.case,
+                )
 
         client = self._service_client(
             endpoint_url=spec.config.local_endpoint,
@@ -184,12 +187,7 @@ def _is_retryable_state_machine_error(exc: ClientError) -> bool:
     return isinstance(code, str) and code in _RETRYABLE_STATE_MACHINE_ERROR_CODES
 
 
-def _assert_mock_case_exists(
-    *,
-    mock_config_path: Path,
-    state_machine_name: str,
-    case_name: str,
-) -> None:
+def _load_mock_config_document(mock_config_path: Path) -> Mapping[str, Any]:
     try:
         contents = mock_config_path.read_text(encoding="utf-8")
         document = json.loads(contents)
@@ -209,9 +207,45 @@ def _assert_mock_case_exists(
         msg = f"Step Functions Local mock config {mock_config_path} must contain 'StateMachines'."
         raise ConfigurationError(msg)
 
-    state_machine_entry = state_machines.get(state_machine_name)
-    if state_machine_entry is None and len(state_machines) == 1:
-        state_machine_entry = next(iter(state_machines.values()))
+    for state_machine_key, state_machine_entry in state_machines.items():
+        if not isinstance(state_machine_entry, Mapping):
+            msg = (
+                "Step Functions Local mock config "
+                f"{mock_config_path} has invalid state machine entry {state_machine_key!r}."
+            )
+            raise ConfigurationError(msg)
+
+        test_cases = state_machine_entry.get("TestCases")
+        if not isinstance(test_cases, Mapping):
+            msg = (
+                "Step Functions Local mock config "
+                f"{mock_config_path} must define 'TestCases' for state machine "
+                f"{state_machine_key!r}."
+            )
+            raise ConfigurationError(msg)
+
+        for case_key, case_entry in test_cases.items():
+            if not isinstance(case_entry, Mapping):
+                msg = (
+                    "Step Functions Local mock config "
+                    f"{mock_config_path} has invalid test case entry "
+                    f"{state_machine_key!r}.{case_key!r}."
+                )
+                raise ConfigurationError(msg)
+
+    return state_machines
+
+
+def _assert_mock_case_exists(
+    *,
+    mock_document: Mapping[str, Any],
+    mock_config_path: Path,
+    state_machine_name: str,
+    case_name: str,
+) -> None:
+    state_machine_entry = mock_document.get(state_machine_name)
+    if state_machine_entry is None and len(mock_document) == 1:
+        state_machine_entry = next(iter(mock_document.values()))
     if not isinstance(state_machine_entry, Mapping):
         msg = (
             f"Mock config {mock_config_path} does not contain state machine {state_machine_name!r}."

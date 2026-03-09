@@ -13,6 +13,7 @@ from pytest_stepfunctions.backends.local import (
     _assert_mock_case_exists,
     _failure_details_from_history,
     _is_retryable_state_machine_error,
+    _load_mock_config_document,
 )
 from pytest_stepfunctions.backends.teststate import TestStateBackend as _TestStateBackend
 from pytest_stepfunctions.config import ResolvedConfig
@@ -560,7 +561,9 @@ def test_assert_mock_case_exists_validates_structure(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
+    document = _load_mock_config_document(path)
     _assert_mock_case_exists(
+        mock_document=document,
         mock_config_path=path,
         state_machine_name="OrderFlow",
         case_name="HappyPath",
@@ -571,8 +574,10 @@ def test_assert_mock_case_exists_raises_for_missing_case(tmp_path: Path) -> None
     path = tmp_path / "MockConfigFile.json"
     path.write_text('{"StateMachines": {"OrderFlow": {"TestCases": {}}}}', encoding="utf-8")
 
+    document = _load_mock_config_document(path)
     with pytest.raises(MockCaseNotFoundError, match="HappyPath"):
         _assert_mock_case_exists(
+            mock_document=document,
             mock_config_path=path,
             state_machine_name="OrderFlow",
             case_name="HappyPath",
@@ -879,19 +884,65 @@ def test_assert_mock_case_exists_rejects_invalid_shapes(tmp_path: Path) -> None:
     bad_json = tmp_path / "bad.json"
     bad_json.write_text("{", encoding="utf-8")
     with pytest.raises(ConfigurationError, match="Invalid JSON"):
-        _assert_mock_case_exists(
-            mock_config_path=bad_json,
-            state_machine_name="OrderFlow",
-            case_name="HappyPath",
-        )
+        _load_mock_config_document(bad_json)
 
     missing_state_machines = tmp_path / "missing.json"
     missing_state_machines.write_text("{}", encoding="utf-8")
     with pytest.raises(ConfigurationError, match="must contain 'StateMachines'"):
-        _assert_mock_case_exists(
-            mock_config_path=missing_state_machines,
-            state_machine_name="OrderFlow",
-            case_name="HappyPath",
+        _load_mock_config_document(missing_state_machines)
+
+    invalid_state_machine = tmp_path / "invalid-state-machine.json"
+    invalid_state_machine.write_text('{"StateMachines": {"OrderFlow": []}}', encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="invalid state machine entry"):
+        _load_mock_config_document(invalid_state_machine)
+
+    invalid_test_cases = tmp_path / "invalid-test-cases.json"
+    invalid_test_cases.write_text(
+        '{"StateMachines": {"OrderFlow": {"TestCases": []}}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigurationError, match="must define 'TestCases'"):
+        _load_mock_config_document(invalid_test_cases)
+
+    invalid_case_entry = tmp_path / "invalid-case-entry.json"
+    invalid_case_entry.write_text(
+        '{"StateMachines": {"OrderFlow": {"TestCases": {"HappyPath": []}}}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigurationError, match="invalid test case entry"):
+        _load_mock_config_document(invalid_case_entry)
+
+
+def test_local_backend_validates_mock_config_without_case(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    mock_config = tmp_path / "MockConfigFile.json"
+    mock_config.write_text('{"StateMachines": {"OrderFlow": []}}', encoding="utf-8")
+    backend = LocalBackend(_config(mock_config=mock_config))
+
+    class _UnexpectedClient(_FakeLocalClient):
+        def create_state_machine(self, **kwargs: object) -> dict[str, object]:
+            del kwargs
+            msg = "client should not be called when mock config is invalid"
+            raise AssertionError(msg)
+
+    def fake_service_client(**_kwargs: object) -> _UnexpectedClient:
+        return _UnexpectedClient()
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+
+    with pytest.raises(ConfigurationError, match="invalid state machine entry"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={}),
+                timeout_seconds=None,
+                config=_config(mock_config=mock_config),
+            )
         )
 
 

@@ -50,7 +50,7 @@
 - [x] `Scenario.case` を `stateMachineArn#CaseName` に変換する
 - [x] `ExecutionResult` への変換を実装する
 - [x] `sfn_mock_config` を読んで test case 存在確認を入れる
-- [ ] mock config の深い構造検証を入れる
+- [x] mock config の基本構造検証を入れる
 - [x] Local integration test を追加する
 
 ### 3.2 `teststate`
@@ -61,8 +61,8 @@
 - [x] `next_state` の取り扱いを実装する
 - [x] backend エラーの正規化を実装する
 - [ ] 単一 state 定義の専用入力形を整理する
-- [ ] inspection level の公開方針を決める
-- [ ] 1 TPS 制約への対策を入れるか決める
+- [x] inspection level を alpha では `INFO` 固定にする
+- [x] 1 TPS 制約は alpha では documented limitation にする
 
 ### 3.3 `aws`
 
@@ -72,7 +72,7 @@
 - [x] timeout 時の `StopExecution` を実装する
 - [x] `ExecutionResult` への変換を実装する
 - [x] `Scenario.case` / `mock_config` / `local_endpoint` の拒否を実装する
-- [ ] `sfn_test_state` をどう扱うか再設計する
+- [x] alpha では `sfn_test_state` 非対応を固定する
 
 ## 4. fixture と plugin の残タスク
 
@@ -102,7 +102,7 @@
 - [x] `docs/requirements.md` を runtime 実装後のスコープへ更新する
 - [x] runtime backend 設計書を追加する
 - [x] `tutorials/order_status/` に手動チュートリアルを追加する
-- [ ] backend ごとの troubleshooting を追加する
+- [x] backend ごとの troubleshooting を追加する
 - [x] examples を追加する
 - [x] GitHub Actions で Local integration job を追加する
 
@@ -113,4 +113,4 @@
 - [ ] mock config lint を追加する
 - [ ] `aws` backend の再利用モードや `sfn_test_state` 対応を検討する
 - [ ] xdist 連携方針を整理する
-- [ ] release / changelog / PyPI 手順を整える
+- [x] release / changelog / PyPI 手順を整える

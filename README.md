@@ -8,6 +8,8 @@
 - 分岐、retry、catch を CI 上で再現可能にする
 - Step Functions Local と AWS `TestState` を pytest らしい形で使い分けられるようにする
 
+現在の公開候補は Public PyPI 向け alpha `0.1.0a1` です。変更履歴は [`CHANGELOG.md`](CHANGELOG.md)、maintainer 向け公開手順は [`docs/release.md`](docs/release.md) を参照してください。
+
 ## 現在のステータス
 
 現時点で実装済みのもの:
@@ -31,6 +33,7 @@
 - `local` backend の最小実装
   - Step Functions Local への state machine 作成
   - `Scenario.case` の `stateMachineArn#CaseName` 変換
+  - `sfn_mock_config` の JSON 構造検査と test case 存在確認
   - 実行完了待ち
   - timeout 監視
   - 実行後の state machine 削除
@@ -61,7 +64,7 @@
 - AWS `TestState` の常設 CI job
 - YAML definition 対応
 - `TestState` のスロットリングや xdist 連携
-- mock config の深い lint
+- mock config の semantic lint
 
 ## インストール
 
@@ -271,20 +274,32 @@ Step Functions Local を使って state machine 全体を実行します。
 
 AWS `TestState` API を使って state 単体テストを実行します。  
 `sfn_test_state` の既定 backend です。
+inspection level は alpha では `INFO` 固定で、公開オプションにはしていません。
 
 ### `aws`
 
 AWS Step Functions 上で state machine 全体を実行します。  
 `sfn_run` でのみ使えます。state machine はテストごとに一時作成し、実行後に削除します。
 
+## alpha 時点のサポート境界
+
+| capability | `local` | `teststate` | `aws` |
+| --- | --- | --- | --- |
+| `sfn_run` | yes | no | yes |
+| `sfn_test_state` | no | yes | no |
+| `Scenario.case` | yes | n/a | no |
+| `sfn_mock_config` | yes | no | no |
+| 常設 CI | local integration のみ | opt-in のみ | opt-in のみ |
+
 ## 制約と注意点
 
 - `local` backend は Step Functions Local が別途起動済みである前提です。
+- `local` backend で `sfn_mock_config` を指定した場合は、実行前に JSON 構造を検査します。`Scenario.case` を併用した場合だけ test case 名の存在確認も行います。
 - `local` backend の validation は AWS `ValidateStateMachineDefinition` を使います。`--sfn-validate` を有効にする場合は AWS API に到達できる認証情報と region が必要です。
 - `teststate` backend は `role_arn` が必須です。
 - `teststate` backend の opt-in integration test は `PYTEST_STEPFUNCTIONS_RUN_TESTSTATE_INTEGRATION=1` と `--sfn-role-arn` 付きで `tests/integration/test_teststate_backend.py` を実行します。
-- `teststate` backend に対する plugin 内スロットリングはまだ入っていません。
-- `Scenario.case` の事前確認は `sfn_mock_config` が設定されている場合に限って行います。
+- `teststate` backend の inspection level は `INFO` 固定です。
+- `teststate` backend に対する plugin 内スロットリングはまだ入っていません。`xdist` 併用も alpha では未サポートです。
 - `aws` backend は `role_arn` が必須です。
 - `aws` backend は `sfn_run` 専用です。`sfn_test_state` では使えません。
 - `aws` backend では `Scenario.case`、`sfn_mock_config`、`--sfn-local-endpoint` は使えません。
@@ -293,6 +308,26 @@ AWS Step Functions 上で state machine 全体を実行します。
 - `aws` backend の最小権限は `states:CreateStateMachine`、`states:StartExecution`、`states:DescribeExecution`、`states:DeleteStateMachine`、`states:StopExecution`、`iam:PassRole` です。
 - `definition` の YAML は未対応です。
 - `tutorials/order_status/` は手動チュートリアルであり、integration test の代替ではありません。
+
+## troubleshooting
+
+### `local`
+
+- `--sfn-local-endpoint` の先に Step Functions Local が起動していることを確認してください。
+- `sfn_mock_config` を使う場合は root object、`StateMachines`、各 `TestCases` が JSON object になっている必要があります。
+- `Scenario.case` と mock config の case 名が一致しない場合は実行前に失敗します。
+
+### `teststate`
+
+- `--sfn-role-arn` または `sfn_role_arn` が必須です。
+- `states:TestState` を使える認証情報が必要です。
+- 1 TPS 制約があるため、並列実行や `xdist` 併用ではスロットリングしやすくなります。
+
+### `aws`
+
+- `--sfn-role-arn` または `sfn_role_arn` が必須です。
+- `sfn_test_state` は使えません。state 単体テストは `teststate` backend を使ってください。
+- `Scenario.case`、`sfn_mock_config`、`--sfn-local-endpoint` を渡すと設定エラーになります。
 
 ## 開発コマンド
 
