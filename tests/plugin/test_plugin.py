@@ -37,26 +37,86 @@ def test_marker_registration_is_visible(pytester: pytest.Pytester) -> None:
     assert result.ret == 0
 
 
-def test_stub_fixtures_fail_with_actionable_message(pytester: pytest.Pytester) -> None:
+def test_sfn_run_executes_local_backend(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
-        def test_sfn_run_stub(sfn_run):
-            sfn_run({"input": "ignored"})
+        import pytest
+        from pytest_stepfunctions import Scenario
 
-        def test_sfn_test_state_stub(sfn_test_state):
-            sfn_test_state(definition={}, state_name="CheckStatus", input={})
+        class FakeClient:
+            def create_state_machine(self, **kwargs):
+                return {"stateMachineArn": "arn:aws:states:local:stateMachine:OrderFlow"}
+
+            def start_execution(self, **kwargs):
+                assert kwargs["stateMachineArn"].endswith("#HappyPath")
+                return {"executionArn": "arn:aws:states:local:execution:OrderFlow:exec-1"}
+
+            def describe_execution(self, **kwargs):
+                return {"status": "SUCCEEDED", "output": '{"status": "paid"}'}
+
+            def delete_state_machine(self, **kwargs):
+                return None
+
+        @pytest.mark.sfn(
+            definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+            name="OrderFlow",
+        )
+        def test_sfn_run_executes(monkeypatch, sfn_run):
+            monkeypatch.setattr(
+                "pytest_stepfunctions.backends.base.boto3.client",
+                lambda *args, **kwargs: FakeClient(),
+            )
+            result = sfn_run(
+                Scenario(id="happy", input={"orderId": "o-1"}, case="HappyPath", name="exec-1")
+            )
+
+            result.assert_succeeded()
+            assert result.output_json == {"status": "paid"}
         """
     )
 
     result = pytester.runpytest("-q")
 
-    result.stdout.fnmatch_lines(
-        [
-            "*sfn_run is scaffolded but not implemented yet.*",
-            "*sfn_test_state is scaffolded but not implemented yet.*",
-        ]
+    result.stdout.fnmatch_lines(["*1 passed*"])
+    assert result.ret == 0
+
+
+def test_sfn_test_state_executes_teststate_backend(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(
+        """
+        class FakeClient:
+            def test_state(self, **kwargs):
+                assert kwargs["stateName"] == "CheckStatus"
+                return {
+                    "status": "SUCCEEDED",
+                    "output": '{"status": "PAID"}',
+                    "nextState": "Complete",
+                }
+
+        def test_sfn_test_state_executes(monkeypatch, sfn_test_state):
+            monkeypatch.setattr(
+                "pytest_stepfunctions.backends.base.boto3.client",
+                lambda *args, **kwargs: FakeClient(),
+            )
+            result = sfn_test_state(
+                definition={
+                    "StartAt": "CheckStatus",
+                    "States": {"CheckStatus": {"Type": "Succeed"}},
+                },
+                state_name="CheckStatus",
+                input={"status": "PAID"},
+                role_arn="arn:aws:iam::123456789012:role/TestStateRole",
+            )
+
+            result.assert_succeeded()
+            assert result.next_state == "Complete"
+        """
     )
-    assert result.ret == 1
+
+    result = pytester.runpytest("-q")
+
+    result.stdout.fnmatch_lines(["*1 passed*"])
+    assert result.ret == 0
 
 
 def test_cli_options_are_exposed_in_help(pytester: pytest.Pytester) -> None:

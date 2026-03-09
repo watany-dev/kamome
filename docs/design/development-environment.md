@@ -1,8 +1,10 @@
 # 開発環境 scaffold 設計
 
+この文書は M0 scaffold 段階の設計を記録したものです。runtime 実装後の現在設計は `docs/design/runtime-backends.md` を参照します。
+
 ## 概要
 
-この設計書は、`pytest-stepfunctions` の v0.1 着手前に必要な開発環境と plugin 骨組みを定義する。
+この設計書は、`pytest-stepfunctions` の v0.1 着手前に必要だった開発環境と plugin 骨組みを定義する。
 対象は「開発を始められること」であり、Step Functions backend の実行機能そのものはまだ含めない。
 
 ## 到達点

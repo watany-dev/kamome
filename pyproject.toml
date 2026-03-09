@@ -108,7 +108,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 packages = ["pytest_stepfunctions"]
 
 [[tool.mypy.overrides]]
-module = ["pytest", "_pytest.*", "tomli", "tomllib"]
+module = ["pytest", "_pytest.*", "tomli", "tomllib", "boto3", "botocore", "botocore.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

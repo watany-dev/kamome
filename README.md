@@ -6,51 +6,49 @@
 
 - ASL 定義の壊れを早く検知する
 - 分岐、retry、catch を CI 上で再現可能にする
-- Step Functions Local と AWS `TestState` を使い分けられるようにする
+- Step Functions Local と AWS `TestState` を pytest らしい形で使い分けられるようにする
 
 ## 現在のステータス
 
-このリポジトリは、実行 backend 実装の前段階として開発環境と plugin 骨組みを持つ状態です。
-
 現時点で実装済みのもの:
 
-- `pyproject.toml` と `src/pytest_stepfunctions/` レイアウト
-- `pytest11` entry point による plugin 自動読込設定
-- `sfn` marker の登録
-- `--sfn-*` CLI オプションの登録
-- `Scenario` と `ExecutionResult` の公開 dataclass
-- `sfn_run` と `sfn_test_state` fixture の scaffold
-- `uv run ci` を正本とする厳格な品質ゲート
-- `ruff`、`mypy`、`pytest-cov`、`build`、`vulture`、`pip-audit` を使う CI
+- `pytest11` entry point による plugin 自動読込
+- `sfn` marker と `--sfn-*` CLI オプション
+- `Scenario` / `ExecutionResult` の公開 dataclass
+- `definition` のロードと正規化
+  - ファイルパス
+  - `dict`
+  - JSON 文字列
+- 設定優先順位の解決
+  1. fixture 呼び出し引数
+  2. marker
+  3. CLI
+  4. `pyproject.toml`
+  5. デフォルト値
+- `backend="auto"` の解決
+  - `sfn_run` は `local`
+  - `sfn_test_state` は `teststate`
+- `local` backend の最小実装
+  - Step Functions Local への state machine 作成
+  - `Scenario.case` の `stateMachineArn#CaseName` 変換
+  - 実行完了待ち
+  - timeout 監視
+  - 実行後の state machine 削除
+- `teststate` backend の最小実装
+  - AWS `TestState` API 呼び出し
+  - `ExecutionResult` への正規化
+- `ValidateStateMachineDefinition` を使う optional validation
+- `aws` backend の stub
+- `uv run ci` を正本とする品質ゲート
 
 まだ未実装のもの:
 
-- ASL definition のロードと正規化
-- `local` backend の state machine 実行
-- `teststate` backend の `TestState` 実行
-- validation 実行と設定優先順位の解決
-- Step Functions Local を使う integration test
-
-`sfn_run` と `sfn_test_state` は名前解決できますが、現時点では呼び出すと「scaffold 済みだが未実装」で明示的に失敗します。
-
-## 設計方針
-
-公開 API はできるだけ pytest 標準に寄せます。
-
-- 実行 API は fixture にする
-- 静的設定は marker にする
-- 複数シナリオは `@pytest.mark.parametrize` で表現する
-- 戻り値は boto3 生レスポンスではなく共通 dataclass に揃える
-- backend 差分は `local` / `teststate` / `aws` で抽象化する
-
-v0.1 で固定した方針:
-
-- パッケージ名は `pytest-stepfunctions`
-- import 名は `pytest_stepfunctions`
-- Python 対応は 3.10 から 3.13
-- 開発ワークフローは `uv`
-- scaffold 段階でも `uv run ci` を hard fail の品質ゲートとして維持する
-- `aws` backend は v0.1 では stub のみ
+- `aws` backend の本実装
+- Step Functions Local を使う integration test / CI job
+- AWS `TestState` の常設 CI job
+- YAML definition 対応
+- `TestState` のスロットリングや xdist 連携
+- mock config の深い lint
 
 ## インストール
 
@@ -60,34 +58,73 @@ v0.1 で固定した方針:
 pip install pytest-stepfunctions
 ```
 
-ただし、現時点では PyPI 公開前の scaffold 段階です。開発参加時は `uv` を使います。
+開発参加時は `uv` を使います。
 
 ```bash
 uv sync --extra dev
 ```
 
-## 開発コマンド
+## Quick Start
 
-```bash
-uv run ci
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy src tests
-uv run python -m build
+### state machine 実行
+
+```python
+import pytest
+from pytest_stepfunctions import Scenario
+
+pytestmark = pytest.mark.sfn(
+    definition="tests/workflows/order_flow.asl.json",
+    name="OrderFlow",
+)
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        Scenario(id="happy", input={"orderId": "o-1"}, case="HappyPath"),
+        Scenario(id="payment_timeout", input={"orderId": "o-1"}, case="PaymentFails"),
+    ],
+    ids=lambda s: s.id,
+)
+def test_order_flow(sfn_run, scenario):
+    result = sfn_run(scenario)
+
+    if scenario.id == "happy":
+        result.assert_succeeded()
+    else:
+        result.assert_failed("Payment.Timeout")
 ```
 
-`uv run ci` は提出前の正本コマンドです。次を順に実行し、どれか 1 つでも失敗したら終了します。
+### state 単体テスト
 
-- `ruff format --check`
-- `ruff check`
-- `mypy src tests`
-- `pytest --cov=pytest_stepfunctions --cov-branch --cov-fail-under=95`
-- `python -m build --no-isolation`
-- `vulture`
-- `pip-audit`
+```python
+def test_check_status_paid(sfn_test_state):
+    result = sfn_test_state(
+        definition={
+            "StartAt": "CheckStatus",
+            "States": {
+                "CheckStatus": {
+                    "Type": "Choice",
+                    "Choices": [
+                        {
+                            "Variable": "$.status",
+                            "StringEquals": "PAID",
+                            "Next": "Complete",
+                        }
+                    ],
+                    "Default": "Reject",
+                },
+                "Complete": {"Type": "Succeed"},
+                "Reject": {"Type": "Fail", "Error": "Order.NotPaid"},
+            },
+        },
+        state_name="CheckStatus",
+        input={"status": "PAID"},
+        role_arn="arn:aws:iam::123456789012:role/StepFunctionsTestRole",
+    )
 
-このため、`src/pytest_stepfunctions` のカバレッジは常に 95% 以上を維持する前提です。現在の scaffold 実装では unit / plugin test を通じて 100% を確認しています。
+    result.assert_succeeded()
+    assert result.next_state == "Complete"
+```
 
 ## 現在の公開 API
 
@@ -141,111 +178,20 @@ class ExecutionResult:
 
 ### fixture
 
-- `sfn_run`
-- `sfn_test_state`
+- `sfn_run(scenario, *, definition=None, name=None, backend=None, timeout=None, validate=None, region=None, local_endpoint=None, role_arn=None, definition_root=None, mock_config=None)`
+- `sfn_test_state(*, definition=None, state_name, input, backend=None, timeout=None, validate=None, region=None, local_endpoint=None, role_arn=None, definition_root=None, mock_config=None)`
 
-### CLI
+### CLI / `pyproject.toml`
 
-- `--sfn-backend`
-- `--sfn-region`
-- `--sfn-local-endpoint`
-- `--sfn-role-arn`
-- `--sfn-definition-root`
-- `--sfn-mock-config`
-- `--sfn-validate`
+- `--sfn-backend` / `sfn_backend`
+- `--sfn-region` / `sfn_region`
+- `--sfn-local-endpoint` / `sfn_local_endpoint`
+- `--sfn-role-arn` / `sfn_role_arn`
+- `--sfn-definition-root` / `sfn_definition_root`
+- `--sfn-mock-config` / `sfn_mock_config`
+- `--sfn-validate` / `sfn_validate`
 
-## 予定している API 例
-
-以下は最終形の利用イメージであり、まだ動作しません。
-
-### state machine 実行テスト
-
-```python
-import pytest
-from pytest_stepfunctions import Scenario
-
-pytestmark = pytest.mark.sfn(
-    definition="tests/workflows/order_flow.asl.json",
-    name="OrderFlow",
-)
-
-@pytest.mark.parametrize(
-    "scenario",
-    [
-        Scenario(id="happy", input={"orderId": "o-1"}, case="HappyPath"),
-        Scenario(id="payment_timeout", input={"orderId": "o-1"}, case="PaymentFails"),
-    ],
-    ids=lambda s: s.id,
-)
-def test_order_flow(sfn_run, scenario):
-    result = sfn_run(scenario)
-
-    if scenario.id == "happy":
-        result.assert_succeeded()
-        assert result.output_json == {"orderId": "o-1", "status": "paid"}
-    else:
-        result.assert_failed("Payment.Timeout")
-```
-
-### state 単体テスト
-
-```python
-def test_check_status_paid(sfn_test_state):
-    result = sfn_test_state(
-        definition={
-            "StartAt": "CheckStatus",
-            "States": {
-                "CheckStatus": {
-                    "Type": "Choice",
-                    "Choices": [
-                        {
-                            "Variable": "$.status",
-                            "StringEquals": "PAID",
-                            "Next": "Complete",
-                        }
-                    ],
-                    "Default": "Reject",
-                },
-                "Complete": {"Type": "Succeed"},
-                "Reject": {"Type": "Fail", "Error": "Order.NotPaid"},
-            },
-        },
-        state_name="CheckStatus",
-        input={"status": "PAID"},
-    )
-
-    result.assert_succeeded()
-    assert result.next_state == "Complete"
-```
-
-## backend 方針
-
-### `local`
-
-Step Functions Local を使って state machine 全体を実行する想定です。  
-CI での高速回帰向けで、v0.1 の主対象です。
-
-### `teststate`
-
-AWS `TestState` API を使って state 単体テストを行う想定です。  
-Choice / Task / Fail 遷移の確認向けで、v0.1 の主対象です。
-
-### `aws`
-
-実 state machine を AWS 上に作成して確認する backend です。  
-v0.1 では名前だけを残す stub 扱いで、実装と CI 対象には含めません。
-
-## 設定方針
-
-最終的な設定優先順位は次を予定しています。
-
-1. fixture 呼び出し引数
-2. marker
-3. CLI
-4. `pyproject.toml`
-5. デフォルト値
-
-`pyproject.toml` の設定例:
+`pyproject.toml` 例:
 
 ```toml
 [tool.pytest.ini_options]
@@ -253,23 +199,49 @@ sfn_backend = "auto"
 sfn_region = "ap-northeast-1"
 sfn_definition_root = "tests/workflows"
 sfn_local_endpoint = "http://127.0.0.1:8083"
+sfn_role_arn = "arn:aws:iam::123456789012:role/StepFunctionsTestRole"
 sfn_mock_config = "tests/stepfunctions/MockConfigFile.json"
+sfn_validate = true
 markers = [
   "sfn(definition, name=None, backend=None, timeout=None): Step Functions test metadata",
 ]
 ```
 
-この設定解決はまだ未実装です。
+## backend 方針
 
-## 制約事項
+### `local`
 
-- Step Functions Local と AWS 実サービスの feature parity は保証しません
-- `TestState` の quota や並列実行制約への対応は未実装です
-- Step Functions Local 用 Docker 構成と integration test job はまだありません
-- README 内の「予定している API 例」は、実装済み機能ではありません
+Step Functions Local を使って state machine 全体を実行します。  
+`sfn_run` の既定 backend です。
 
-## ドキュメント
+### `teststate`
 
-- [TODO.md](./TODO.md): 実装バックログ
-- [docs/requirements.md](./docs/requirements.md): v0.1 要件メモ
-- [docs/design/development-environment.md](./docs/design/development-environment.md): 開発環境 scaffold の設計
+AWS `TestState` API を使って state 単体テストを実行します。  
+`sfn_test_state` の既定 backend です。
+
+### `aws`
+
+名前だけを残した stub です。選択すると未実装エラーになります。
+
+## 制約と注意点
+
+- `local` backend は Step Functions Local が別途起動済みである前提です。
+- `local` backend の validation は AWS `ValidateStateMachineDefinition` を使います。`--sfn-validate` を有効にする場合は AWS API に到達できる認証情報と region が必要です。
+- `teststate` backend は `role_arn` が必須です。
+- `teststate` backend に対する plugin 内スロットリングはまだ入っていません。
+- `Scenario.case` の事前確認は `sfn_mock_config` が設定されている場合に限って行います。
+- `definition` の YAML は未対応です。
+- `aws` backend は非目標ではなく将来候補ですが、現時点では未実装です。
+
+## 開発コマンド
+
+```bash
+uv run ci
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src tests
+uv run python -m build
+```
+
+`uv run ci` は提出前の正本コマンドです。format、lint、type check、coverage 付き test、build、dead code check、dependency audit を順に実行します。
