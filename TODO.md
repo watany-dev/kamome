@@ -88,7 +88,7 @@
 - [x] `pytester` を使う plugin test
 - [x] 95% 以上の branch coverage を維持する
 - [x] Step Functions Local integration test
-- [ ] AWS `TestState` の opt-in integration test
+- [x] AWS `TestState` の opt-in integration test
 
 ## 6. ドキュメント
 

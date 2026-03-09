@@ -28,6 +28,7 @@
 - `aws` backend stub
 - `tutorials/order_status/` の手動チュートリアル
 - Step Functions Local integration test
+- AWS `TestState` opt-in integration test
 - GitHub Actions の dedicated Local integration job
 - `uv run ci` を正本とする品質ゲート
 
@@ -57,6 +58,7 @@
 
 - `local` backend は Step Functions Local が事前起動されていることを前提とする
 - `teststate` backend は `role_arn` を必須とする
+- `tests/integration/test_teststate_backend.py` は `PYTEST_STEPFUNCTIONS_RUN_TESTSTATE_INTEGRATION=1` と `role_arn` 設定がある場合のみ実行する
 - validation は AWS `ValidateStateMachineDefinition` へ到達できる認証情報が必要
 - `Scenario.case` の事前検証は `sfn_mock_config` が設定されている場合のみ行う
 - tutorial は学習用の手動実行資材であり、通常の CI 対象ではない
