@@ -12,7 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from ..exceptions import ConfigurationError, ExecutionTimeoutError, MockCaseNotFoundError
 from ..model import ExecutionResult
-from .base import Backend, StepFunctionsClientProtocol
+from .base import Backend, StepFunctionsClientProtocol, optional_response_str
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -85,8 +85,8 @@ class LocalBackend(Backend):
                         backend=self.name,
                         execution_arn=execution_arn,
                         output_json=self._parse_json_output(final_response.get("output")),
-                        error=_optional_str(final_response.get("error")),
-                        cause=_optional_str(final_response.get("cause")),
+                        error=optional_response_str(final_response.get("error")),
+                        cause=optional_response_str(final_response.get("cause")),
                         next_state=None,
                         raw={
                             "create_state_machine": create_response,
@@ -168,8 +168,8 @@ def _failure_details_from_history(
         failure_details = {
             key: value
             for key, value in (
-                ("error", _optional_str(details.get("error"))),
-                ("cause", _optional_str(details.get("cause"))),
+                ("error", optional_response_str(details.get("error"))),
+                ("cause", optional_response_str(details.get("cause"))),
             )
             if value is not None
         }
@@ -222,7 +222,3 @@ def _assert_mock_case_exists(
     if not isinstance(test_cases, Mapping) or case_name not in test_cases:
         msg = f"Mock config {mock_config_path} does not contain test case {case_name!r}."
         raise MockCaseNotFoundError(msg)
-
-
-def _optional_str(value: object) -> str | None:
-    return value if isinstance(value, str) else None

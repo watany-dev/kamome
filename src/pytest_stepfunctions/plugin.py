@@ -132,7 +132,8 @@ def sfn_run(request: pytest.FixtureRequest) -> RunCallable:
                 config=runtime_config,
                 state_name=None,
             )
-            return _execute_run(backend_impl=backend_impl, spec=spec)
+            resolved_spec = replace(spec, config=replace(runtime_config, backend=backend_impl.name))
+            return _execute_run(backend_impl=backend_impl, spec=resolved_spec)
         except PytestStepFunctionsError as exc:
             pytest.fail(str(exc), pytrace=False)
 
@@ -187,7 +188,8 @@ def sfn_test_state(request: pytest.FixtureRequest) -> StateCallable:
                 config=runtime_config,
                 state_name=state_name,
             )
-            return _execute_state_test(backend_impl=backend_impl, spec=spec)
+            resolved_spec = replace(spec, config=replace(runtime_config, backend=backend_impl.name))
+            return _execute_state_test(backend_impl=backend_impl, spec=resolved_spec)
         except PytestStepFunctionsError as exc:
             pytest.fail(str(exc), pytrace=False)
 
@@ -225,24 +227,34 @@ def _ensure_state_name(state_name: object) -> None:
     raise ConfigurationError(msg)
 
 
-def _execute_run(*, backend_impl: Backend, spec: ExecutionSpec) -> ExecutionResult:
-    if spec.config.validate:
+def _maybe_validate(
+    *, backend_impl: Backend, definition: dict[str, Any], definition_source: str, validate: bool
+) -> None:
+    if validate:
         ensure_validation_passed(
-            backend_impl.validate(spec.definition),
-            source_label=spec.definition_source,
+            backend_impl.validate(definition),
+            source_label=definition_source,
         )
-    return backend_impl.run(replace(spec, config=replace(spec.config, backend=backend_impl.name)))
+
+
+def _execute_run(*, backend_impl: Backend, spec: ExecutionSpec) -> ExecutionResult:
+    _maybe_validate(
+        backend_impl=backend_impl,
+        definition=spec.definition,
+        definition_source=spec.definition_source,
+        validate=spec.config.validate,
+    )
+    return backend_impl.run(spec)
 
 
 def _execute_state_test(*, backend_impl: Backend, spec: StateTestSpec) -> ExecutionResult:
-    if spec.config.validate:
-        ensure_validation_passed(
-            backend_impl.validate(spec.definition),
-            source_label=spec.definition_source,
-        )
-    return backend_impl.test_state(
-        replace(spec, config=replace(spec.config, backend=backend_impl.name))
+    _maybe_validate(
+        backend_impl=backend_impl,
+        definition=spec.definition,
+        definition_source=spec.definition_source,
+        validate=spec.config.validate,
     )
+    return backend_impl.test_state(spec)
 
 
 def _resolve_state_machine_name(

@@ -6,7 +6,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from ..exceptions import ConfigurationError
 from ..model import ExecutionResult, ExecutionSpec, StateTestSpec
-from .base import Backend
+from .base import Backend, optional_response_str
 
 
 class TestStateBackend(Backend):
@@ -41,13 +41,9 @@ class TestStateBackend(Backend):
             status=str(response["status"]),
             backend=self.name,
             execution_arn=None,
-            output_json=self._parse_json_output(_optional_str(response.get("output"))),
-            error=_optional_str(response.get("error")),
-            cause=_optional_str(response.get("cause")),
-            next_state=_optional_str(response.get("nextState")),
+            output_json=self._parse_json_output(optional_response_str(response.get("output"))),
+            error=optional_response_str(response.get("error")),
+            cause=optional_response_str(response.get("cause")),
+            next_state=optional_response_str(response.get("nextState")),
             raw=dict(response),
         )
-
-
-def _optional_str(value: object) -> str | None:
-    return value if isinstance(value, str) else None

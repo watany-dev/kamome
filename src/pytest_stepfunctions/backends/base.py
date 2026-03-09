@@ -82,13 +82,20 @@ class Backend(ABC):
             kwargs["aws_session_token"] = _DUMMY_CREDENTIAL
         return cast("StepFunctionsClientProtocol", boto3.client("stepfunctions", **kwargs))
 
-    def _json_dump(self, payload: object) -> str:
+    @staticmethod
+    def _json_dump(payload: object) -> str:
         return json.dumps(payload)
 
-    def _parse_json_output(self, payload: str | None) -> object | None:
+    @staticmethod
+    def _parse_json_output(payload: str | None) -> object | None:
         if payload is None:
             return None
         return cast("object", json.loads(payload))
 
     def _backend_error(self, action: str, exc: Exception) -> BackendError:
         return BackendError(f"{self.name} backend failed to {action}: {exc}")
+
+
+def optional_response_str(value: object) -> str | None:
+    """Extract a string from a boto3 response field, or return None."""
+    return value if isinstance(value, str) else None

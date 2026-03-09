@@ -49,8 +49,10 @@ def load_definition(
             )
 
         path = _resolve_definition_path(Path(text), definition_root=definition_root)
-        if path.exists():
+        try:
             return _load_definition_file(path)
+        except DefinitionLoadError:
+            pass
 
         try:
             parsed = _parse_definition_json(text, source_label="<inline JSON definition>")
@@ -73,11 +75,11 @@ def _resolve_definition_path(path: Path, *, definition_root: Path | None) -> Pat
 
 
 def _load_definition_file(path: Path) -> NormalizedDefinition:
-    if not path.exists():
-        msg = f"Definition file not found: {path}"
-        raise DefinitionLoadError(msg)
     try:
         contents = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        msg = f"Definition file not found: {path}"
+        raise DefinitionLoadError(msg) from None
     except OSError as exc:  # pragma: no cover - exercised by Python runtime
         msg = f"Could not read definition file {path}: {exc}"
         raise DefinitionLoadError(msg) from exc
