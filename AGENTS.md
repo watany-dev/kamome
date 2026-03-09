@@ -3,17 +3,26 @@
 ## Project Overview
 
 - This repository is for `pytest-stepfunctions`, a pytest plugin for testing AWS Step Functions.
-- The project is still in the planning and documentation stage. There is no package scaffold or test runner configuration yet.
+- The repository now has an initial Python package scaffold, pytest plugin entry point, basic tests, and CI.
+- Runtime backends are not implemented yet; `README.md` must keep implemented scaffold and planned behavior clearly separated.
 - `README.md` is the current product and API overview.
 - `TODO.md` is the current implementation backlog and should stay aligned with any code or design changes.
 
 ## Working Agreements
 
 - Keep the package name as `pytest-stepfunctions` and the import name as `pytest_stepfunctions` unless the user explicitly changes that decision.
-- Prefer docs-first changes while the repository is still being scaffolded. If you define a feature in detail, update `README.md`, `TODO.md`, and add or update `docs/requirements.md` or `docs/design/*.md` as needed.
+- Keep `README.md`, `TODO.md`, `docs/requirements.md`, and `docs/design/*.md` synchronized with code and scope changes.
 - Preserve the intended package layout from `TODO.md` when introducing code: `src/pytest_stepfunctions/` with the pytest plugin entry point.
 - Be explicit about planned versus implemented behavior. Do not present roadmap items as already working.
-- There are no authoritative build or test commands yet. If you add project tooling, update this file and `CLAUDE.md` with the exact commands and keep `README.md` consistent.
+
+## Commands
+
+- Install dev environment: `uv sync --extra dev`
+- Run tests: `uv run pytest`
+- Run lint: `uv run ruff check .`
+- Check formatting: `uv run ruff format --check .`
+- Run type checks: `uv run mypy src tests`
+- Build package: `uv run python -m build`
 
 ## Repo Skills
 

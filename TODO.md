@@ -2,21 +2,21 @@
 
 ## 0. 方針の固定
 
-- [ ] パッケージ名を `pytest-stepfunctions` で確定する
-- [ ] import 名を `pytest_stepfunctions` で確定する
-- [ ] v0.1 のスコープを固定する
-- [ ] `aws` backend は v0.1 対象外にするか決める
-- [ ] Python 対応バージョンを決める
-- [ ] boto3 / pytest の最低対応バージョンを決める
+- [x] パッケージ名を `pytest-stepfunctions` で確定する
+- [x] import 名を `pytest_stepfunctions` で確定する
+- [x] v0.1 のスコープを「開発環境 + 最小 plugin scaffold」で固定する
+- [x] `aws` backend は v0.1 では stub のみと決める
+- [x] Python 対応バージョンを 3.10-3.13 に決める
+- [x] boto3 / pytest の最低対応バージョンを `boto3>=1.34` / `pytest>=8.0` に決める
 
 ## 1. プロジェクト雛形
 
-- [ ] `pyproject.toml` を作成する
-- [ ] `src/pytest_stepfunctions/` レイアウトにする
-- [ ] `pytest11` entry point を設定する
-- [ ] `Framework :: Pytest` classifier を付ける
-- [ ] formatter / linter / type checker を決める
-- [ ] CI の最小構成を作る
+- [x] `pyproject.toml` を作成する
+- [x] `src/pytest_stepfunctions/` レイアウトにする
+- [x] `pytest11` entry point を設定する
+- [x] `Framework :: Pytest` classifier を付ける
+- [x] formatter / linter / type checker を `ruff` / `mypy` に決める
+- [x] CI の最小構成を作る
 
 想定構成:
 
@@ -48,28 +48,28 @@ tests/
 
 ### 2.1 `Scenario`
 
-- [ ] `Scenario` dataclass を実装する
-- [ ] `id`
-- [ ] `input`
-- [ ] `case`
-- [ ] `name`
-- [ ] `timeout`
+- [x] `Scenario` dataclass を実装する
+- [x] `id`
+- [x] `input`
+- [x] `case`
+- [x] `name`
+- [x] `timeout`
 - [ ] 将来拡張用に metadata の必要性を検討する
 
 ### 2.2 `ExecutionResult`
 
-- [ ] `ExecutionResult` dataclass を実装する
-- [ ] `status`
-- [ ] `backend`
-- [ ] `execution_arn`
-- [ ] `output_json`
-- [ ] `error`
-- [ ] `cause`
-- [ ] `next_state`
-- [ ] `raw`
-- [ ] `assert_status()` を実装する
-- [ ] `assert_succeeded()` を実装する
-- [ ] `assert_failed()` を実装する
+- [x] `ExecutionResult` dataclass を実装する
+- [x] `status`
+- [x] `backend`
+- [x] `execution_arn`
+- [x] `output_json`
+- [x] `error`
+- [x] `cause`
+- [x] `next_state`
+- [x] `raw`
+- [x] `assert_status()` を実装する
+- [x] `assert_succeeded()` を実装する
+- [x] `assert_failed()` を実装する
 
 ### 2.3 spec 用 dataclass
 
@@ -81,7 +81,7 @@ tests/
 ## 3. 設定解決レイヤ
 
 - [ ] `pyproject.toml` から設定を読む
-- [ ] CLI オプションを追加する
+- [x] CLI オプションを追加する
 - [ ] marker から設定を読む
 - [ ] fixture 呼び出し引数で上書きできるようにする
 - [ ] 設定優先順位を実装する
@@ -108,27 +108,28 @@ tests/
 
 ### 4.1 marker 登録
 
-- [ ] `pytest_configure()` を実装する
-- [ ] `sfn` marker を登録する
-- [ ] `pytest --markers` で説明が見えるようにする
+- [x] `pytest_configure()` を実装する
+- [x] `sfn` marker を登録する
+- [x] `pytest --markers` で説明が見えるようにする
 
 ### 4.2 option 登録
 
-- [ ] `pytest_addoption()` を実装する
-- [ ] backend に choices を付ける
+- [x] `pytest_addoption()` を実装する
+- [x] backend に choices を付ける
 - [ ] 不正値時の usage error を確認する
 
 ### 4.3 fixture 実装
 
-- [ ] `sfn_run` fixture を作る
-- [ ] `sfn_test_state` fixture を作る
+- [x] `sfn_run` fixture を作る
+- [x] `sfn_test_state` fixture を作る
 - [ ] 必要なら `sfn_validate` fixture を作る
 - [ ] session-scoped client fixture を作る
 - [ ] function-scoped executor fixture を作る
+- [ ] fixture の未実装 stub を本実装に置き換える
 
 ### 4.4 assertion rewriting
 
-- [ ] helper モジュールを `register_assert_rewrite()` 対象にする
+- [x] helper モジュールを `register_assert_rewrite()` 対象にする
 - [ ] 失敗時メッセージの見え方を確認する
 
 ## 5. 定義ロードと正規化
@@ -259,16 +260,16 @@ tests/
 - [ ] marker 読み取りのテスト
 - [ ] definition ロードのテスト
 - [ ] backend auto 解決のテスト
-- [ ] `ExecutionResult` のテスト
+- [x] `ExecutionResult` のテスト
 - [ ] 例外変換のテスト
 
 ### 13.2 plugin test
 
-- [ ] `pytester` を使った plugin 読み込みテスト
-- [ ] marker 登録テスト
-- [ ] fixture 解決テスト
-- [ ] CLI オプション反映テスト
-- [ ] `pytest --markers` 表示テスト
+- [x] `pytester` を使った plugin 読み込みテスト
+- [x] marker 登録テスト
+- [x] fixture 解決テスト
+- [x] CLI オプション反映テスト
+- [x] `pytest --markers` 表示テスト
 
 ### 13.3 integration test
 
@@ -287,15 +288,16 @@ tests/
 
 ## 14. CI
 
-- [ ] GitHub Actions を作る
-- [ ] lint ジョブを追加する
-- [ ] unit test ジョブを追加する
-- [ ] plugin test ジョブを追加する
+- [x] GitHub Actions を作る
+- [x] lint ジョブを追加する
+- [x] unit test ジョブを追加する
+- [x] plugin test ジョブを追加する
 - [ ] Step Functions Local integration job を追加する
 - [ ] 必要なら AWS `TestState` job を分離する
 
 ### CI でやること
 
+- [x] build
 - [ ] validation
 - [ ] local backend test
 - [ ] optional な teststate backend test
@@ -304,17 +306,19 @@ tests/
 
 ### 15.1 README
 
-- [ ] 目的を書く
-- [ ] backend の違いを書く
-- [ ] Quick Start を入れる
-- [ ] 設定例を書く
-- [ ] CI での使い分けを書く
-- [ ] 制約事項を書く
+- [x] 目的を書く
+- [x] backend の違いを書く
+- [x] Quick Start を入れる
+- [x] 設定例を書く
+- [x] CI での使い分けを書く
+- [x] 制約事項を書く
 - [ ] 非目標を書く
 
 ### 15.2 docs
 
 - [ ] API reference を作る
+- [x] 開発環境設計書を作る
+- [x] 要件メモを作る
 - [ ] backend ごとの詳細を書く
 - [ ] Local mock config の考え方を書く
 - [ ] `TestState` を使う場面を書く

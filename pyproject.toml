@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytest-stepfunctions"
+version = "0.1.0a0"
+description = "Pytest plugin for testing AWS Step Functions workflows."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10,<3.14"
+authors = [
+  { name = "OpenAI" },
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Framework :: Pytest",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Testing",
+]
+dependencies = [
+  "boto3>=1.34",
+  "pytest>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "mypy>=1.13",
+  "pytest-cov>=5.0",
+  "ruff>=0.8",
+]
+
+[project.entry-points.pytest11]
+pytest_stepfunctions = "pytest_stepfunctions.plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pytest_stepfunctions"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+markers = [
+  "sfn(definition, name=None, backend=None, timeout=None): Step Functions test metadata",
+]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = ["src"]
+strict = true
+packages = ["pytest_stepfunctions"]

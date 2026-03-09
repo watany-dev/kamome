@@ -8,10 +8,10 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 Current project status:
 
-- The repository is still documentation-first.
-- `README.md` describes the intended public API and product direction.
+- The repository has an initial package scaffold, pytest plugin entry point, plugin tests, and CI.
+- `README.md` describes both the implemented scaffold and the intended public API direction.
 - `TODO.md` is the implementation backlog and planned package layout.
-- Source code, packaging metadata, and CI configuration have not been created yet.
+- Runtime backends and config resolution are still unimplemented.
 
 ## Current Working Rules
 
@@ -25,11 +25,14 @@ Current project status:
 
 There are no project-specific build, lint, or test commands configured yet.
 
-Until scaffolding exists, the minimum completion bar is:
+Authoritative commands:
 
-1. Keep `README.md` and `TODO.md` consistent with the change.
-2. If a design is introduced or changed, add or update `docs/requirements.md` or `docs/design/*.md`.
-3. If you add tooling such as `pyproject.toml`, test configuration, or CI, document the exact commands here and in `AGENTS.md`.
+1. `uv sync --extra dev`
+2. `uv run pytest`
+3. `uv run ruff check .`
+4. `uv run ruff format --check .`
+5. `uv run mypy src tests`
+6. `uv run python -m build`
 
 ## Project Principles
 
