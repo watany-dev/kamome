@@ -37,10 +37,16 @@
 - `teststate` backend の最小実装
   - AWS `TestState` API 呼び出し
   - `ExecutionResult` への正規化
+- `aws` backend の最小実装
+  - AWS Step Functions への state machine 作成
+  - 実行完了待ち
+  - timeout 時の `StopExecution`
+  - 実行後の state machine 削除
 - AWS `TestState` を使う opt-in integration test
   - `tests/integration/test_teststate_backend.py`
+- AWS Step Functions を使う opt-in integration test
+  - `tests/integration/test_aws_backend.py`
 - `ValidateStateMachineDefinition` を使う optional validation
-- `aws` backend の stub
 - `tutorials/order_status/` の手動チュートリアル
   - Step Functions Local を使う `sfn_run` サンプル
   - AWS `TestState` を使う `sfn_test_state` サンプル
@@ -51,7 +57,7 @@
 
 まだ未実装のもの:
 
-- `aws` backend の本実装
+- `aws` backend の `sfn_test_state` 対応
 - AWS `TestState` の常設 CI job
 - YAML definition 対応
 - `TestState` のスロットリングや xdist 連携
@@ -151,7 +157,7 @@ uv run pytest tutorials/order_status/tests/test_teststate_order_status.py -q --s
 
 このチュートリアルは学習用資材です。通常の `uv run ci` には含めません。
 
-実 backend を使う自動統合確認は `tests/integration/test_local_backend.py` と `tests/integration/test_teststate_backend.py` にあります。
+実 backend を使う自動統合確認は `tests/integration/test_local_backend.py`、`tests/integration/test_teststate_backend.py`、`tests/integration/test_aws_backend.py` にあります。
 
 Step Functions Local を使う場合は、ローカルを起動したうえで次を実行します。
 
@@ -164,6 +170,13 @@ AWS `TestState` を使う場合は、AWS credentials を用意し、`states:Test
 ```bash
 PYTEST_STEPFUNCTIONS_RUN_TESTSTATE_INTEGRATION=1 uv run pytest tests/integration/test_teststate_backend.py -q \
   --sfn-role-arn arn:aws:iam::123456789012:role/StepFunctionsTestRole
+```
+
+AWS Step Functions を使う `aws` backend の場合は、AWS credentials を用意し、state machine 実行用 role ARN を指定して次を実行します。
+
+```bash
+PYTEST_STEPFUNCTIONS_RUN_AWS_INTEGRATION=1 uv run pytest tests/integration/test_aws_backend.py -q \
+  --sfn-role-arn arn:aws:iam::123456789012:role/StepFunctionsExecutionRole
 ```
 
 ## 現在の公開 API
@@ -261,7 +274,8 @@ AWS `TestState` API を使って state 単体テストを実行します。
 
 ### `aws`
 
-名前だけを残した stub です。選択すると未実装エラーになります。
+AWS Step Functions 上で state machine 全体を実行します。  
+`sfn_run` でのみ使えます。state machine はテストごとに一時作成し、実行後に削除します。
 
 ## 制約と注意点
 
@@ -271,8 +285,13 @@ AWS `TestState` API を使って state 単体テストを実行します。
 - `teststate` backend の opt-in integration test は `PYTEST_STEPFUNCTIONS_RUN_TESTSTATE_INTEGRATION=1` と `--sfn-role-arn` 付きで `tests/integration/test_teststate_backend.py` を実行します。
 - `teststate` backend に対する plugin 内スロットリングはまだ入っていません。
 - `Scenario.case` の事前確認は `sfn_mock_config` が設定されている場合に限って行います。
+- `aws` backend は `role_arn` が必須です。
+- `aws` backend は `sfn_run` 専用です。`sfn_test_state` では使えません。
+- `aws` backend では `Scenario.case`、`sfn_mock_config`、`--sfn-local-endpoint` は使えません。
+- `aws` backend の opt-in integration test は `PYTEST_STEPFUNCTIONS_RUN_AWS_INTEGRATION=1` と `--sfn-role-arn` 付きで `tests/integration/test_aws_backend.py` を実行します。
+- `aws` backend で `--sfn-validate` を使う場合も AWS `ValidateStateMachineDefinition` を呼ぶ認証情報が必要です。
+- `aws` backend の最小権限は `states:CreateStateMachine`、`states:StartExecution`、`states:DescribeExecution`、`states:DeleteStateMachine`、`states:StopExecution`、`iam:PassRole` です。
 - `definition` の YAML は未対応です。
-- `aws` backend は非目標ではなく将来候補ですが、現時点では未実装です。
 - `tutorials/order_status/` は手動チュートリアルであり、integration test の代替ではありません。
 
 ## 開発コマンド

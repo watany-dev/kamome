@@ -222,6 +222,38 @@ def test_sfn_run_fixture_executes_backend(monkeypatch: pytest.MonkeyPatch) -> No
     assert spec.config.backend == "local"
 
 
+def test_sfn_run_fixture_allows_explicit_aws_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = _FakeConfig()
+    request = _FakeRequest(
+        config=config,
+        node=_FakeNode(
+            marker=_FakeMarker(
+                kwargs={"definition": {"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}}}
+            )
+        ),
+    )
+    backend = _FakeBackend()
+    backend.name = "aws"
+
+    def fake_create_backend(*_args: object, **_kwargs: object) -> _FakeBackend:
+        return backend
+
+    monkeypatch.setattr(plugin, "create_backend", fake_create_backend)
+
+    fixture = _fixture_factory(plugin.sfn_run)
+    runner = cast("plugin.RunCallable", fixture(request))
+    result = runner(
+        Scenario(id="happy", input={"orderId": "o-1"}),
+        backend="aws",
+        role_arn="arn:aws:iam::1:role/test",
+    )
+
+    result.assert_succeeded()
+    spec = backend.run_specs[0]
+    assert spec.config.backend == "aws"
+    assert spec.config.role_arn == "arn:aws:iam::1:role/test"
+
+
 def test_sfn_test_state_fixture_executes_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     config = _FakeConfig()
     request = _FakeRequest(

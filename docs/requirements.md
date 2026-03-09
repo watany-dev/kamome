@@ -24,17 +24,18 @@
 - 設定優先順位の解決
 - `local` backend の最小実装
 - `teststate` backend の最小実装
+- `aws` backend の `sfn_run` 実装
 - optional validation
-- `aws` backend stub
 - `tutorials/order_status/` の手動チュートリアル
 - Step Functions Local integration test
 - AWS `TestState` opt-in integration test
+- AWS `sfn_run` opt-in integration test
 - GitHub Actions の dedicated Local integration job
 - `uv run ci` を正本とする品質ゲート
 
 ## 非スコープ
 
-- `aws` backend の本実装
+- `aws` backend の `sfn_test_state` 対応
 - AWS `TestState` integration test の常設 CI
 - YAML definition 対応
 - `TestState` のレート制御
@@ -45,7 +46,7 @@
 
 - `local`: `sfn_run` の主 backend。Step Functions Local に state machine を都度作成して実行し、実行後に削除する
 - `teststate`: `sfn_test_state` の主 backend。AWS `TestState` API を直接呼ぶ
-- `aws`: 名前だけ残す stub。選択時は未実装エラー
+- `aws`: `sfn_run` 用の実 backend。AWS 上に state machine を都度作成して実行し、timeout 時は `StopExecution` を試みてから削除する
 
 ## 公開 API 方針
 
@@ -59,9 +60,12 @@
 - `local` backend は Step Functions Local が事前起動されていることを前提とする
 - `teststate` backend は `role_arn` を必須とする
 - `tests/integration/test_teststate_backend.py` は `PYTEST_STEPFUNCTIONS_RUN_TESTSTATE_INTEGRATION=1` と `role_arn` 設定がある場合のみ実行する
+- `aws` backend は `role_arn` を必須とし、`Scenario.case` / `sfn_mock_config` / `--sfn-local-endpoint` を受け付けない
+- `tests/integration/test_aws_backend.py` は `PYTEST_STEPFUNCTIONS_RUN_AWS_INTEGRATION=1` と `role_arn` 設定がある場合のみ実行する
 - validation は AWS `ValidateStateMachineDefinition` へ到達できる認証情報が必要
 - `Scenario.case` の事前検証は `sfn_mock_config` が設定されている場合のみ行う
 - tutorial は学習用の手動実行資材であり、通常の CI 対象ではない
+- `aws` backend で必要になる最小権限は `states:CreateStateMachine`、`states:StartExecution`、`states:DescribeExecution`、`states:DeleteStateMachine`、`states:StopExecution`、`iam:PassRole`
 
 ## 品質ルール
 

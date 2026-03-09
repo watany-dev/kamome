@@ -87,6 +87,6 @@ uv run pytest tutorials/order_status/tests/test_teststate_order_status.py -q \
 ## 注意
 
 - このフォルダは学習用の手動チュートリアルです。通常の `uv run ci` では実行しません。
-- 実 backend を使う opt-in integration test は `tests/integration/test_local_backend.py` と `tests/integration/test_teststate_backend.py` にあります。
-- `aws` backend はまだ未実装なので、このチュートリアルでも扱いません。
+- 実 backend を使う opt-in integration test は `tests/integration/test_local_backend.py`、`tests/integration/test_teststate_backend.py`、`tests/integration/test_aws_backend.py` にあります。
+- `aws` backend は `sfn_run` でのみ実装済みですが、このチュートリアルでは Local と `TestState` の使い分けに絞ります。
 - `--sfn-validate` を付けると AWS `ValidateStateMachineDefinition` を使うため、Local 実行でも AWS 認証が必要になります。

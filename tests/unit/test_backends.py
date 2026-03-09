@@ -18,7 +18,6 @@ from pytest_stepfunctions.backends.teststate import TestStateBackend as _TestSta
 from pytest_stepfunctions.config import ResolvedConfig
 from pytest_stepfunctions.exceptions import (
     BackendError,
-    BackendNotImplementedError,
     ConfigurationError,
     ExecutionTimeoutError,
     MockCaseNotFoundError,
@@ -88,6 +87,35 @@ class _FakeTestStateClient:
             "output": '{"status": "paid"}',
             "nextState": "Complete",
         }
+
+
+class _FakeAwsClient:
+    def __init__(self, *, statuses: list[dict[str, object]] | None = None) -> None:
+        self.deleted: list[str] = []
+        self.describe_calls = 0
+        self.statuses = statuses or [{"status": "SUCCEEDED", "output": '{"status": "paid"}'}]
+        self.stop_calls: list[dict[str, object]] = []
+
+    def create_state_machine(self, **kwargs: object) -> dict[str, object]:
+        self.created = kwargs
+        return {"stateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:OrderFlow"}
+
+    def start_execution(self, **kwargs: object) -> dict[str, object]:
+        self.started = kwargs
+        return {"executionArn": "arn:aws:states:us-east-1:123456789012:execution:OrderFlow:exec-1"}
+
+    def describe_execution(self, **kwargs: object) -> dict[str, object]:
+        self.describe_calls += 1
+        self.described = kwargs
+        index = min(self.describe_calls - 1, len(self.statuses) - 1)
+        return self.statuses[index]
+
+    def stop_execution(self, **kwargs: object) -> dict[str, object]:
+        self.stop_calls.append(kwargs)
+        return {"stopDate": "2026-03-09T00:00:00Z"}
+
+    def delete_state_machine(self, **kwargs: object) -> None:
+        self.deleted.append(str(kwargs["stateMachineArn"]))
 
 
 class _DummyBackend(Backend):
@@ -592,10 +620,108 @@ def test_teststate_backend_maps_response(monkeypatch: pytest.MonkeyPatch) -> Non
     assert result.next_state == "Complete"
 
 
-def test_aws_backend_is_stub() -> None:
+def test_aws_backend_run_translates_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _FakeAwsClient()
+    backend = AwsBackend(_config(backend="aws", role_arn="arn:aws:iam::1:role/test"))
+
+    def fake_service_client(**_kwargs: object) -> _FakeAwsClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+
+    result = backend.run(
+        ExecutionSpec(
+            definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+            definition_source="<inline>",
+            state_machine_name="OrderFlow",
+            execution_name="exec-1",
+            scenario=Scenario(id="happy", input={"orderId": "o-1"}),
+            timeout_seconds=5,
+            config=_config(backend="aws", role_arn="arn:aws:iam::1:role/test"),
+        )
+    )
+
+    assert result.status == "SUCCEEDED"
+    assert result.output_json == {"status": "paid"}
+    assert result.backend == "aws"
+    assert str(client.created["roleArn"]) == "arn:aws:iam::1:role/test"
+    assert str(client.started["stateMachineArn"]).startswith(
+        "arn:aws:states:us-east-1:123456789012:stateMachine:OrderFlow"
+    )
+    assert client.deleted == ["arn:aws:states:us-east-1:123456789012:stateMachine:OrderFlow"]
+
+
+def test_aws_backend_maps_failed_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _FakeAwsClient(
+        statuses=[
+            {
+                "status": "FAILED",
+                "error": "Order.NotPaid",
+                "cause": "Order status was not PAID.",
+            }
+        ]
+    )
+    backend = AwsBackend(_config(backend="aws", role_arn="arn:aws:iam::1:role/test"))
+
+    def fake_service_client(**_kwargs: object) -> _FakeAwsClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+
+    result = backend.run(
+        ExecutionSpec(
+            definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+            definition_source="<inline>",
+            state_machine_name="OrderFlow",
+            execution_name="exec-1",
+            scenario=Scenario(id="pending", input={"orderId": "o-1"}),
+            timeout_seconds=5,
+            config=_config(backend="aws", role_arn="arn:aws:iam::1:role/test"),
+        )
+    )
+
+    assert result.status == "FAILED"
+    assert result.error == "Order.NotPaid"
+    assert result.cause == "Order status was not PAID."
+
+
+def test_aws_backend_timeout_stops_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _FakeAwsClient(statuses=[{"status": "RUNNING"}])
+    backend = AwsBackend(_config(backend="aws", role_arn="arn:aws:iam::1:role/test"))
+
+    def fake_service_client(**_kwargs: object) -> _FakeAwsClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+    monkeypatch.setattr("pytest_stepfunctions.backends.aws.time.monotonic", lambda: 0.0)
+
+    with pytest.raises(ExecutionTimeoutError, match="did not finish"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="timeout", input={"orderId": "o-1"}),
+                timeout_seconds=0,
+                config=_config(backend="aws", role_arn="arn:aws:iam::1:role/test"),
+            )
+        )
+
+    assert client.stop_calls == [
+        {
+            "executionArn": "arn:aws:states:us-east-1:123456789012:execution:OrderFlow:exec-1",
+            "error": "PytestStepFunctions.Timeout",
+            "cause": "Execution exceeded the configured pytest-stepfunctions timeout.",
+        }
+    ]
+    assert client.deleted == ["arn:aws:states:us-east-1:123456789012:stateMachine:OrderFlow"]
+
+
+def test_aws_backend_requires_role_arn() -> None:
     backend = AwsBackend(_config(backend="aws"))
 
-    with pytest.raises(BackendNotImplementedError, match="not implemented"):
+    with pytest.raises(ConfigurationError, match="requires --sfn-role-arn"):
         backend.run(
             ExecutionSpec(
                 definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
@@ -609,10 +735,61 @@ def test_aws_backend_is_stub() -> None:
         )
 
 
-def test_aws_backend_test_state_is_stub() -> None:
-    backend = AwsBackend(_config(backend="aws"))
+def test_aws_backend_rejects_local_only_options(tmp_path: Path) -> None:
+    backend = AwsBackend(_config(backend="aws", role_arn="arn:aws:iam::1:role/test"))
 
-    with pytest.raises(BackendNotImplementedError, match="not implemented"):
+    with pytest.raises(ConfigurationError, match=r"Scenario\.case"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={}, case="HappyPath"),
+                timeout_seconds=None,
+                config=_config(backend="aws", role_arn="arn:aws:iam::1:role/test"),
+            )
+        )
+
+    with pytest.raises(ConfigurationError, match="sfn_mock_config"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={}),
+                timeout_seconds=None,
+                config=_config(
+                    backend="aws",
+                    role_arn="arn:aws:iam::1:role/test",
+                    mock_config=tmp_path / "mock.json",
+                ),
+            )
+        )
+
+    with pytest.raises(ConfigurationError, match="sfn-local-endpoint"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={}),
+                timeout_seconds=None,
+                config=_config(
+                    backend="aws",
+                    role_arn="arn:aws:iam::1:role/test",
+                    local_endpoint="http://custom-local",
+                ),
+            )
+        )
+
+
+def test_aws_backend_test_state_is_rejected() -> None:
+    backend = AwsBackend(_config(backend="aws", role_arn="arn:aws:iam::1:role/test"))
+
+    with pytest.raises(ConfigurationError, match="does not support sfn_test_state"):
         backend.test_state(
             StateTestSpec(
                 definition={"StartAt": "Check", "States": {"Check": {"Type": "Succeed"}}},
@@ -620,7 +797,37 @@ def test_aws_backend_test_state_is_stub() -> None:
                 state_name="Check",
                 input={},
                 timeout_seconds=None,
-                config=_config(backend="aws"),
+                config=_config(backend="aws", role_arn="arn:aws:iam::1:role/test"),
+            )
+        )
+
+
+def test_aws_backend_wraps_client_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AwsBackend(_config(backend="aws", role_arn="arn:aws:iam::1:role/test"))
+
+    class _FailingClient:
+        def create_state_machine(self, **kwargs: object) -> dict[str, object]:
+            del kwargs
+            raise ClientError({"Error": {"Code": "Boom", "Message": "bad"}}, "CreateStateMachine")
+
+        def delete_state_machine(self, **kwargs: object) -> None:
+            del kwargs
+
+    def fake_service_client(**_kwargs: object) -> _FailingClient:
+        return _FailingClient()
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+
+    with pytest.raises(BackendError, match="run an aws execution"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={}),
+                timeout_seconds=None,
+                config=_config(backend="aws", role_arn="arn:aws:iam::1:role/test"),
             )
         )
 

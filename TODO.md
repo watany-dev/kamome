@@ -6,7 +6,7 @@
 - [x] import 名を `pytest_stepfunctions` で固定する
 - [x] Python 対応を 3.10-3.13 に固定する
 - [x] 開発ワークフローを `uv` に固定する
-- [x] `aws` backend は当面 stub 扱いにする
+- [x] `aws` backend は `sfn_run` を優先して実装する
 
 ## 1. 基盤と公開 API
 
@@ -66,8 +66,13 @@
 
 ### 3.3 `aws`
 
-- [x] 未実装 stub を残す
-- [ ] 正式実装のマイルストーンを設計する
+- [x] `sfn_run` 用 backend を実装する
+- [x] `role_arn` 必須条件を実装する
+- [x] state machine の一時作成 / 実行 / 削除を実装する
+- [x] timeout 時の `StopExecution` を実装する
+- [x] `ExecutionResult` への変換を実装する
+- [x] `Scenario.case` / `mock_config` / `local_endpoint` の拒否を実装する
+- [ ] `sfn_test_state` をどう扱うか再設計する
 
 ## 4. fixture と plugin の残タスク
 
@@ -89,6 +94,7 @@
 - [x] 95% 以上の branch coverage を維持する
 - [x] Step Functions Local integration test
 - [x] AWS `TestState` の opt-in integration test
+- [x] AWS `sfn_run` の opt-in integration test
 
 ## 6. ドキュメント
 
@@ -105,6 +111,6 @@
 - [ ] `Scenario` の metadata 拡張を検討する
 - [ ] YAML definition 対応を追加する
 - [ ] mock config lint を追加する
-- [ ] `aws` backend を正式実装する
+- [ ] `aws` backend の再利用モードや `sfn_test_state` 対応を検討する
 - [ ] xdist 連携方針を整理する
 - [ ] release / changelog / PyPI 手順を整える
