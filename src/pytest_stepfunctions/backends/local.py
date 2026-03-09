@@ -115,7 +115,6 @@ class LocalBackend(Backend):
             if state_machine_arn is not None:
                 with suppress(BotoCoreError, ClientError):
                     client.delete_state_machine(stateMachineArn=state_machine_arn)
-        raise AssertionError
 
     def test_state(self, spec: StateTestSpec) -> ExecutionResult:
         del spec
