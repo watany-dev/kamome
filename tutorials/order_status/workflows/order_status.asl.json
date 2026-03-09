@@ -1,0 +1,31 @@
+{
+  "Comment": "Tutorial workflow for pytest-stepfunctions.",
+  "StartAt": "CheckStatus",
+  "States": {
+    "CheckStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.status",
+          "StringEquals": "PAID",
+          "Next": "Complete"
+        }
+      ],
+      "Default": "Reject"
+    },
+    "Complete": {
+      "Type": "Pass",
+      "Parameters": {
+        "decision": "complete",
+        "orderId.$": "$.orderId",
+        "status.$": "$.status"
+      },
+      "End": true
+    },
+    "Reject": {
+      "Type": "Fail",
+      "Error": "Order.NotPaid",
+      "Cause": "Order status was not PAID."
+    }
+  }
+}

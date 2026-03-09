@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Run quality gate
+        run: uv run ci
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Test
+        run: uv run pytest
+
+  local-integration:
+    runs-on: ubuntu-latest
+    services:
+      stepfunctions-local:
+        image: amazon/aws-stepfunctions-local:latest
+        ports:
+          - 8083:8083
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Wait for Step Functions Local
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.time() + 30
+          while time.time() < deadline:
+              with socket.socket() as sock:
+                  sock.settimeout(1)
+                  if sock.connect_ex(("127.0.0.1", 8083)) == 0:
+                      break
+              time.sleep(0.5)
+          else:
+              raise SystemExit("Step Functions Local did not accept connections on 127.0.0.1:8083")
+          PY
+
+      - name: Run Local integration test
+        env:
+          PYTEST_STEPFUNCTIONS_RUN_LOCAL_INTEGRATION: "1"
+        run: uv run pytest tests/integration/test_local_backend.py -q
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+          license-check: false
