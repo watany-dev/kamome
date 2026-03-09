@@ -52,7 +52,7 @@ pytest_stepfunctions = "pytest_stepfunctions.plugin"
 packages = ["src/pytest_stepfunctions"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --strict-config --strict-markers"
 markers = [
   "sfn(definition, name=None, backend=None, timeout=None): Step Functions test metadata",
 ]
@@ -66,13 +66,22 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
+  "A",
+  "ANN",
   "E",
   "F",
   "W",
   "I",
   "UP",
   "B",
+  "BLE",
   "C4",
+  "EM",
+  "N",
+  "PTH",
+  "T20",
+  "TC",
+  "TRY",
   "SIM",
   "RET",
   "RUF",
@@ -90,6 +99,12 @@ select = [
 python_version = "3.10"
 mypy_path = ["src"]
 strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 packages = ["pytest_stepfunctions"]
 
 [[tool.mypy.overrides]]
@@ -106,3 +121,11 @@ ignore_decorators = ["@pytest.fixture"]
 ignore_names = ["pytest_*", "sfn_*"]
 min_confidence = 80
 sort_by_size = true
+
+[tool.coverage.run]
+branch = true
+source = ["pytest_stepfunctions"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true

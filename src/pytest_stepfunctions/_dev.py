@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_ROOT = PROJECT_ROOT / ".cache"
@@ -37,12 +39,24 @@ QUALITY_STEPS: tuple[Step, ...] = (
     Step("Format check", (PYTHON, "-m", "ruff", "format", "--check", ".")),
     Step("Lint", (PYTHON, "-m", "ruff", "check", ".")),
     Step("Type check", (PYTHON, "-m", "mypy", "src", "tests")),
-    Step("Tests", (PYTHON, "-m", "pytest")),
+    Step(
+        "Tests",
+        (
+            PYTHON,
+            "-m",
+            "pytest",
+            "--cov=pytest_stepfunctions",
+            "--cov-branch",
+            "--cov-report=term-missing",
+            "--cov-fail-under=95",
+        ),
+    ),
     Step("Build", (PYTHON, "-m", "build", "--no-isolation")),
     Step(
         "Dead code",
         (PYTHON, "-m", "vulture", "src", "tests", "tools/vulture_whitelist.py"),
     ),
+    Step("Dependency audit", (PYTHON, "-m", "pip_audit")),
 )
 
 SECURITY_STEPS: tuple[Step, ...] = (Step("Dependency audit", (PYTHON, "-m", "pip_audit")),)

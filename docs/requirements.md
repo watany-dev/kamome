@@ -24,7 +24,8 @@
 - `--sfn-*` CLI オプション
 - `Scenario` / `ExecutionResult`
 - `sfn_run` / `sfn_test_state` fixture の scaffold
-- lint、type check、unit/plugin test、build を回す CI
+- `uv run ci` を正本とする品質ゲート
+- lint、format check、type check、coverage 付き unit/plugin test、build、dead code check、dependency audit を回す CI
 
 ## v0.1 の非スコープ
 
@@ -39,3 +40,11 @@
 - `local`: v0.1 の主対象だが、今回の実装は scaffold まで
 - `teststate`: v0.1 の主対象だが、今回の実装は scaffold まで
 - `aws`: v0.1 では stub のみ
+
+## 品質ルール
+
+- `uv run ci` を提出前の必須コマンドとして扱う
+- `src/pytest_stepfunctions` は branch coverage 95% 以上を維持する
+- `pytest` は `--strict-config` と `--strict-markers` を有効にする
+- `mypy` は `strict = true` に加えて未使用 ignore、冗長 cast、`Any` 返却、暗黙 re-export なども警告対象にする
+- `ruff` は import 整列、注釈、例外、type-checking import、path 操作などを含む広めのルール集合を使う

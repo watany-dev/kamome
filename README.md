@@ -20,7 +20,8 @@
 - `--sfn-*` CLI オプションの登録
 - `Scenario` と `ExecutionResult` の公開 dataclass
 - `sfn_run` と `sfn_test_state` fixture の scaffold
-- `ruff`、`mypy`、`pytest`、`build` を使う最小 CI
+- `uv run ci` を正本とする厳格な品質ゲート
+- `ruff`、`mypy`、`pytest-cov`、`build`、`vulture`、`pip-audit` を使う CI
 
 まだ未実装のもの:
 
@@ -48,7 +49,7 @@ v0.1 で固定した方針:
 - import 名は `pytest_stepfunctions`
 - Python 対応は 3.10 から 3.13
 - 開発ワークフローは `uv`
-- 初回 CI は lint、type check、unit/plugin tests、build のみ
+- scaffold 段階でも `uv run ci` を hard fail の品質ゲートとして維持する
 - `aws` backend は v0.1 では stub のみ
 
 ## インストール
@@ -68,12 +69,25 @@ uv sync --extra dev
 ## 開発コマンド
 
 ```bash
+uv run ci
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy src tests
 uv run python -m build
 ```
+
+`uv run ci` は提出前の正本コマンドです。次を順に実行し、どれか 1 つでも失敗したら終了します。
+
+- `ruff format --check`
+- `ruff check`
+- `mypy src tests`
+- `pytest --cov=pytest_stepfunctions --cov-branch --cov-fail-under=95`
+- `python -m build --no-isolation`
+- `vulture`
+- `pip-audit`
+
+このため、`src/pytest_stepfunctions` のカバレッジは常に 95% 以上を維持する前提です。現在の scaffold 実装では unit / plugin test を通じて 100% を確認しています。
 
 ## 現在の公開 API
 

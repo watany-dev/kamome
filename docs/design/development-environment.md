@@ -15,7 +15,7 @@
 - `sfn` marker と `--sfn-*` CLI オプションが pytest から見える
 - `sfn_run` と `sfn_test_state` が fixture として解決できる
 - fixture を呼び出したとき、未実装であることが明確な失敗になる
-- unit/plugin test と build を GitHub Actions で実行できる
+- `uv run ci` で format、lint、type check、coverage、build、dead code、dependency audit を一括実行できる
 
 ## 非スコープ
 
@@ -103,13 +103,16 @@ tests/
 ### unit test
 
 - `Scenario` のフィールド保持を確認する
+- `Scenario` が frozen dataclass であることを確認する
 - `ExecutionResult` の assertion メソッドを確認する
+- 公開 package export と assertion rewrite 登録を確認する
 
 ### plugin test
 
 - `pytest11` entry point が宣言されていること
 - `--markers` に `sfn` marker が出ること
 - `--help` に CLI オプションが出ること
+- 不正な backend choice が usage error になること
 - `sfn_run` / `sfn_test_state` が解決し、未実装メッセージで失敗すること
 
 ### CI
@@ -117,11 +120,13 @@ tests/
 GitHub Actions では次を回す。
 
 - `uv sync --extra dev`
-- `uv run ruff check .`
 - `uv run ruff format --check .`
+- `uv run ruff check .`
 - `uv run mypy src tests`
-- `uv run pytest`
-- `uv run python -m build`
+- `uv run pytest --cov=pytest_stepfunctions --cov-branch --cov-fail-under=95`
+- `uv run python -m build --no-isolation`
+- `uv run vulture src tests tools/vulture_whitelist.py`
+- `uv run pip-audit`
 
 ## 後続実装への引き継ぎ
 

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib
 
-import pytest
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_pytest11_entrypoint_is_declared() -> None:
@@ -72,6 +74,13 @@ def test_cli_options_are_exposed_in_help(pytester: pytest.Pytester) -> None:
         ]
     )
     assert result.ret == 0
+
+
+def test_invalid_backend_choice_fails_with_usage_error(pytester: pytest.Pytester) -> None:
+    result = pytester.runpytest("--sfn-backend=invalid")
+
+    result.stderr.fnmatch_lines(["*invalid choice: 'invalid'*"])
+    assert result.ret == 4
 
 
 def test_project_scripts_are_declared() -> None:

@@ -17,6 +17,10 @@
 - [x] `Framework :: Pytest` classifier を付ける
 - [x] formatter / linter / type checker を `ruff` / `mypy` に決める
 - [x] CI の最小構成を作る
+- [x] `uv run ci` を正本の品質ゲートとして固定する
+- [x] `src/pytest_stepfunctions` に coverage 95% 閾値を設定する
+- [x] strict markers / strict config を有効化する
+- [x] `vulture` / `pip-audit` を CI 必須ゲートに含める
 
 想定構成:
 
@@ -96,13 +100,13 @@ tests/
 
 ### CLI 候補
 
-- [ ] `--sfn-backend`
-- [ ] `--sfn-region`
-- [ ] `--sfn-local-endpoint`
-- [ ] `--sfn-role-arn`
-- [ ] `--sfn-definition-root`
-- [ ] `--sfn-mock-config`
-- [ ] `--sfn-validate`
+- [x] `--sfn-backend`
+- [x] `--sfn-region`
+- [x] `--sfn-local-endpoint`
+- [x] `--sfn-role-arn`
+- [x] `--sfn-definition-root`
+- [x] `--sfn-mock-config`
+- [x] `--sfn-validate`
 
 ## 4. pytest plugin 本体
 
@@ -116,7 +120,7 @@ tests/
 
 - [x] `pytest_addoption()` を実装する
 - [x] backend に choices を付ける
-- [ ] 不正値時の usage error を確認する
+- [x] 不正値時の usage error を確認する
 
 ### 4.3 fixture 実装
 
@@ -130,7 +134,7 @@ tests/
 ### 4.4 assertion rewriting
 
 - [x] helper モジュールを `register_assert_rewrite()` 対象にする
-- [ ] 失敗時メッセージの見え方を確認する
+- [x] 失敗時メッセージの見え方を確認する
 
 ## 5. 定義ロードと正規化
 

@@ -18,11 +18,14 @@
 ## Commands
 
 - Install dev environment: `uv sync --extra dev`
+- Run the full required quality gate before handoff: `uv run ci`
 - Run tests: `uv run pytest`
 - Run lint: `uv run ruff check .`
 - Check formatting: `uv run ruff format --check .`
 - Run type checks: `uv run mypy src tests`
 - Build package: `uv run python -m build`
+
+`uv run ci` is the authoritative pre-handoff check and must fail on coverage regressions, lint, type errors, test failures, build failures, dead code findings, and dependency audit failures.
 
 ## Repo Skills
 

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import NoReturn
 
 import pytest
 
-BackendCallable = Callable[..., Any]
+BackendCallable = Callable[..., NoReturn]
 
 _MARKER_DESCRIPTION = (
     "sfn(definition, name=None, backend=None, timeout=None): Step Functions test metadata"
@@ -70,7 +70,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def _not_implemented_backend(fixture_name: str) -> BackendCallable:
-    def _runner(*args: Any, **kwargs: Any) -> Any:
+    def _runner(*args: object, **kwargs: object) -> NoReturn:
         del args, kwargs
         pytest.fail(_UNIMPLEMENTED_MESSAGE.format(fixture_name=fixture_name), pytrace=False)
 

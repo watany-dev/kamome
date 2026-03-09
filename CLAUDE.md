@@ -23,16 +23,17 @@ Current project status:
 
 ## Commands
 
-There are no project-specific build, lint, or test commands configured yet.
-
 Authoritative commands:
 
 1. `uv sync --extra dev`
-2. `uv run pytest`
-3. `uv run ruff check .`
-4. `uv run ruff format --check .`
-5. `uv run mypy src tests`
-6. `uv run python -m build`
+2. `uv run ci`
+3. `uv run pytest`
+4. `uv run ruff check .`
+5. `uv run ruff format --check .`
+6. `uv run mypy src tests`
+7. `uv run python -m build`
+
+`uv run ci` is the required pre-handoff gate. Keep it strict and ensure it fails on coverage dropping below 95% for `src/pytest_stepfunctions`, lint errors, type errors, test failures, build failures, dead code findings, or dependency audit failures.
 
 ## Project Principles
 
