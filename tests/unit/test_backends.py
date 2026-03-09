@@ -65,10 +65,14 @@ class _FakeLocalClient:
 
 
 class _RetryingLocalClient(_FakeLocalClient):
+    def __init__(self, *, failures_before_success: int = 1) -> None:
+        super().__init__()
+        self.failures_before_success = failures_before_success
+
     def start_execution(self, **kwargs: object) -> dict[str, object]:
         self.start_calls += 1
         self.started = kwargs
-        if self.start_calls == 1:
+        if self.start_calls <= self.failures_before_success:
             raise ClientError(
                 {"Error": {"Code": "StateMachineDeleting", "Message": "state machine is deleting"}},
                 "StartExecution",
@@ -300,7 +304,7 @@ def test_local_backend_reads_failure_details_from_execution_history(
 def test_local_backend_retries_state_machine_deleting_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = _RetryingLocalClient()
+    client = _RetryingLocalClient(failures_before_success=3)
     backend = LocalBackend(_config(local_endpoint="http://local"))
 
     def fake_service_client(**_kwargs: object) -> _FakeLocalClient:
@@ -322,12 +326,44 @@ def test_local_backend_retries_state_machine_deleting_errors(
     )
 
     assert result.status == "SUCCEEDED"
-    assert client.create_calls == 2
-    assert client.start_calls == 2
-    assert client.deleted == [
-        "arn:aws:states:local:stateMachine:OrderFlow",
-        "arn:aws:states:local:stateMachine:OrderFlow",
-    ]
+    assert client.create_calls == 4
+    assert client.start_calls == 4
+    assert client.deleted == ["arn:aws:states:local:stateMachine:OrderFlow"] * 4
+
+
+def test_local_backend_stops_retrying_state_machine_deleting_errors_after_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _RetryingLocalClient(failures_before_success=999)
+    backend = LocalBackend(_config(local_endpoint="http://local"))
+    monotonic_values = iter((0.0, 1.0, 2.0, 3.0, 4.0, 5.1))
+
+    def fake_service_client(**_kwargs: object) -> _FakeLocalClient:
+        return client
+
+    monkeypatch.setattr(backend, "_service_client", fake_service_client)
+    monkeypatch.setattr("pytest_stepfunctions.backends.local.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "pytest_stepfunctions.backends.local.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    with pytest.raises(BackendError, match="run a local execution"):
+        backend.run(
+            ExecutionSpec(
+                definition={"StartAt": "Done", "States": {"Done": {"Type": "Succeed"}}},
+                definition_source="<inline>",
+                state_machine_name="OrderFlow",
+                execution_name="exec-1",
+                scenario=Scenario(id="happy", input={"orderId": "o-1"}),
+                timeout_seconds=5,
+                config=_config(local_endpoint="http://local"),
+            )
+        )
+
+    assert client.create_calls == 5
+    assert client.start_calls == 5
+    assert client.deleted == ["arn:aws:states:local:stateMachine:OrderFlow"] * 5
 
 
 def test_local_backend_retries_state_machine_already_exists_on_create(

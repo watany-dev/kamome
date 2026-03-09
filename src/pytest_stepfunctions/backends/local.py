@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 _DEFAULT_LOCAL_ROLE_ARN = "arn:aws:iam::123456789012:role/pytest-stepfunctions-local"
 _TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
 _RETRYABLE_STATE_MACHINE_ERROR_CODES = {"StateMachineAlreadyExists", "StateMachineDeleting"}
-_STATE_MACHINE_RETRY_DELAY_SECONDS = 0.1
-_STATE_MACHINE_RETRY_ATTEMPTS = 5
+_STATE_MACHINE_RETRY_INITIAL_DELAY_SECONDS = 0.1
+_STATE_MACHINE_RETRY_MAX_DELAY_SECONDS = 0.5
+_STATE_MACHINE_RETRY_TIMEOUT_SECONDS = 5.0
 
 
 class LocalBackend(Backend):
@@ -44,9 +45,11 @@ class LocalBackend(Backend):
             use_dummy_credentials=True,
         )
         state_machine_arn: str | None = None
+        retry_deadline = time.monotonic() + _STATE_MACHINE_RETRY_TIMEOUT_SECONDS
+        retry_delay_seconds = _STATE_MACHINE_RETRY_INITIAL_DELAY_SECONDS
 
         try:
-            for attempt in range(_STATE_MACHINE_RETRY_ATTEMPTS):
+            while True:
                 try:
                     create_response = client.create_state_machine(
                         name=spec.state_machine_name,
@@ -92,14 +95,16 @@ class LocalBackend(Backend):
                         },
                     )
                 except ClientError as exc:
-                    if _is_retryable_state_machine_error(exc) and attempt < (
-                        _STATE_MACHINE_RETRY_ATTEMPTS - 1
-                    ):
+                    if _is_retryable_state_machine_error(exc) and time.monotonic() < retry_deadline:
                         if state_machine_arn is not None:
                             with suppress(BotoCoreError, ClientError):
                                 client.delete_state_machine(stateMachineArn=state_machine_arn)
                             state_machine_arn = None
-                        time.sleep(_STATE_MACHINE_RETRY_DELAY_SECONDS)
+                        time.sleep(retry_delay_seconds)
+                        retry_delay_seconds = min(
+                            retry_delay_seconds * 2,
+                            _STATE_MACHINE_RETRY_MAX_DELAY_SECONDS,
+                        )
                         continue
                     action = "run a local execution"
                     raise self._backend_error(action, exc) from exc
