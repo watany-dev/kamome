@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from _pytest.config import Config, Parser
 
 BackendCallable = Callable[..., Any]
 
@@ -19,7 +18,7 @@ _UNIMPLEMENTED_MESSAGE = (
 )
 
 
-def pytest_addoption(parser: Parser) -> None:
+def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("pytest-stepfunctions")
     group.addoption(
         "--sfn-backend",
@@ -66,7 +65,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
 
-def pytest_configure(config: Config) -> None:
+def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", _MARKER_DESCRIPTION)
 
 

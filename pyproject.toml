@@ -32,11 +32,18 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "build>=1.2",
+  "hatchling>=1.27",
   "mypy>=1.13",
+  "pip-audit>=2.8",
   "pytest-cov>=5.0",
   "ruff>=0.8",
   "tomli>=2.0; python_version < '3.11'",
+  "vulture>=2.11",
 ]
+
+[project.scripts]
+ci = "pytest_stepfunctions._dev:main"
+ci-security = "pytest_stepfunctions._dev:security_main"
 
 [project.entry-points.pytest11]
 pytest_stepfunctions = "pytest_stepfunctions.plugin"
@@ -55,13 +62,29 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
   "E",
   "F",
+  "W",
   "I",
+  "UP",
+  "B",
+  "C4",
+  "SIM",
+  "RET",
+  "RUF",
+  "PT",
+  "ARG",
+  "ERA",
+  "S",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"src/pytest_stepfunctions/_dev.py" = ["S404", "S603"]
+"tests/**/*.py" = ["S101"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -76,3 +99,10 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["pytest_stepfunctions.plugin"]
 disallow_untyped_decorators = false
+
+[tool.vulture]
+exclude = [".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "build", "dist"]
+ignore_decorators = ["@pytest.fixture"]
+ignore_names = ["pytest_*", "sfn_*"]
+min_confidence = 80
+sort_by_size = true

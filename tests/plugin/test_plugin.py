@@ -25,7 +25,7 @@ def test_marker_registration_is_visible(pytester: pytest.Pytester) -> None:
         """
     )
 
-    result = pytester.runpytest("-p", "pytest_stepfunctions.plugin", "--markers")
+    result = pytester.runpytest("--markers")
 
     result.stdout.fnmatch_lines(
         [
@@ -46,7 +46,7 @@ def test_stub_fixtures_fail_with_actionable_message(pytester: pytest.Pytester) -
         """
     )
 
-    result = pytester.runpytest("-p", "pytest_stepfunctions.plugin", "-q")
+    result = pytester.runpytest("-q")
 
     result.stdout.fnmatch_lines(
         [
@@ -58,7 +58,7 @@ def test_stub_fixtures_fail_with_actionable_message(pytester: pytest.Pytester) -
 
 
 def test_cli_options_are_exposed_in_help(pytester: pytest.Pytester) -> None:
-    result = pytester.runpytest("-p", "pytest_stepfunctions.plugin", "--help")
+    result = pytester.runpytest("--help")
 
     result.stdout.fnmatch_lines(
         [
@@ -72,3 +72,21 @@ def test_cli_options_are_exposed_in_help(pytester: pytest.Pytester) -> None:
         ]
     )
     assert result.ret == 0
+
+
+def test_project_scripts_are_declared() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    scripts = pyproject["project"]["scripts"]
+
+    assert scripts["ci"] == "pytest_stepfunctions._dev:main"
+    assert scripts["ci-security"] == "pytest_stepfunctions._dev:security_main"
+
+
+def test_dev_dependencies_cover_quality_tooling() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    dev_dependencies = pyproject["project"]["optional-dependencies"]["dev"]
+
+    assert any(dependency.startswith("ruff") for dependency in dev_dependencies)
+    assert any(dependency.startswith("mypy") for dependency in dev_dependencies)
+    assert any(dependency.startswith("vulture") for dependency in dev_dependencies)
+    assert any(dependency.startswith("pip-audit") for dependency in dev_dependencies)

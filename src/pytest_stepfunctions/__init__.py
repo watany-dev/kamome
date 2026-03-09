@@ -1,9 +1,9 @@
 """Public package exports for pytest-stepfunctions."""
 
-from pytest import register_assert_rewrite
+import pytest
 
 from .model import ExecutionResult, Scenario
 
-register_assert_rewrite("pytest_stepfunctions.helpers.assertions")
+pytest.register_assert_rewrite("pytest_stepfunctions.helpers.assertions")
 
 __all__ = ["ExecutionResult", "Scenario"]
